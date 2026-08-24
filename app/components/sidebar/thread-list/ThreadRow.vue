@@ -23,6 +23,7 @@ const props = defineProps<{
   completionAttention?: boolean;
   subtitle?: string;
   pinLabel: string;
+  moveLabel?: string;
   showPinnedIcon?: boolean;
   longPressHandlers?: Record<string, unknown>;
 }>();
@@ -30,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [];
   togglePin: [];
+  move: [];
   rename: [];
 }>();
 
@@ -64,6 +66,9 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
     <ContextMenuContent :collision-padding="12" prioritize-position class="w-40">
       <ContextMenuItem @select="emit('togglePin')">
         {{ pinLabel }}
+      </ContextMenuItem>
+      <ContextMenuItem v-if="moveLabel" @select="emit('move')">
+        {{ moveLabel }}
       </ContextMenuItem>
       <ContextMenuItem @select="emit('rename')">
         {{ $t("app.renameThread") }}

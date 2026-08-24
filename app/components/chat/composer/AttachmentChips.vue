@@ -19,6 +19,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const presentations = computed(() => props.files.map(presentComposerAttachment));
+
+function shortAttachmentName(name: string, maxLength = 24) {
+  if (name.length <= maxLength) return name;
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 ? name.slice(dot) : "";
+  const stemLength = Math.max(8, maxLength - extension.length - 3);
+  return `${name.slice(0, stemLength)}...${extension}`;
+}
 </script>
 
 <template>
@@ -36,7 +44,7 @@ const presentations = computed(() => props.files.map(presentComposerAttachment))
         class="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded bg-background/80 px-1.5 py-0.5 text-[10px] text-foreground backdrop-blur-sm"
         :title="attachment.data.filename"
       >
-        {{ attachment.data.filename }}
+        {{ shortAttachmentName(attachment.data.filename) }}
       </div>
       <!-- Keep removal available without requiring a precise tiny inline target. -->
       <AttachmentRemove :label="t('app.removeAttachment')" class="opacity-100" />

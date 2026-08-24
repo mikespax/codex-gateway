@@ -12,12 +12,16 @@ const props = defineProps<{
   longPressHandlers?: Record<string, unknown>;
   runtimeStatus: (thread: PinnedThreadRecord) => ThreadRuntimeStatus;
   completionAttention: (thread: PinnedThreadRecord) => boolean;
+  headerLabel?: string;
+  showHeader?: boolean;
+  moveLabel?: string;
 }>();
 
 const emit = defineEmits<{
   open: [thread: PinnedThreadRecord];
   unpin: [thread: PinnedThreadRecord];
   rename: [thread: PinnedThreadRecord];
+  move: [thread: PinnedThreadRecord];
 }>();
 
 function subtitleForPinnedThread(thread: PinnedThreadRecord) {
@@ -35,8 +39,8 @@ function isSelectedPinnedThread(thread: PinnedThreadRecord) {
 
 <template>
   <section class="flex min-w-0 max-w-full flex-col overflow-hidden">
-    <div class="flex h-8 items-center justify-between gap-2 px-2 pb-2 text-sm text-ink-muted">
-      <span>{{ $t("app.pinned") }}</span>
+    <div v-if="props.showHeader !== false" class="flex h-8 items-center justify-between gap-2 px-2 pb-2 text-sm text-ink-muted">
+      <span>{{ props.headerLabel ?? $t("app.pinned") }}</span>
       <slot name="header-action" />
     </div>
     <div v-if="threads.length" class="space-y-1">
@@ -50,10 +54,12 @@ function isSelectedPinnedThread(thread: PinnedThreadRecord) {
         :completion-attention="completionAttention(thread)"
         :subtitle="subtitleForPinnedThread(thread) || formatRelative(thread.updatedAt)"
         :pin-label="$t('app.unpinThread')"
+        :move-label="props.moveLabel"
         :long-press-handlers="longPressHandlers"
         show-pinned-icon
         @open="emit('open', thread)"
         @toggle-pin="emit('unpin', thread)"
+        @move="emit('move', thread)"
         @rename="emit('rename', thread)"
       />
     </div>
