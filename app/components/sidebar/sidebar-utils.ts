@@ -1,4 +1,5 @@
 import type { HostRecord, PinnedThreadRecord } from "./sidebar-types";
+import type { ThreadActivitySummary } from "@/stores/gateway-thread-activity";
 
 const threadStatusClassByStatus: Record<string, string> = {
   running: "text-primary",
@@ -73,15 +74,20 @@ function compareSidebarLabels(left: string, right: string) {
 
 /**
  * Returns a display-only copy so deterministic sidebar ordering never rewrites the user's
- * persisted pin list. The explicit locale and identity tie-breakers keep the order identical
- * across browsers even when labels compare equal under case-insensitive collation.
+ * persisted pin list. The newest activity is always first; host/title/identity tie-breakers
+ * keep the order deterministic when timestamps compare equal.
  */
 export function sortPinnedThreadsForDisplay(
   threads: readonly PinnedThreadRecord[],
   hosts: readonly HostRecord[],
+  activityByKey: Readonly<Record<string, ThreadActivitySummary>> = {},
 ) {
   const hostNames = new Map(hosts.map((host) => [host.id, host.name]));
   return threads.toSorted((left, right) => {
+    const byActivity =
+      pinnedThreadActivityAt(right, activityByKey) - pinnedThreadActivityAt(left, activityByKey);
+    if (byActivity !== 0) return byActivity;
+
     const byHostName = compareSidebarLabels(
       hostNames.get(left.hostId) ?? "",
       hostNames.get(right.hostId) ?? "",
@@ -95,6 +101,16 @@ export function sortPinnedThreadsForDisplay(
     if (byHostId !== 0) return byHostId;
     return compareSidebarLabels(pinnedThreadId(left), pinnedThreadId(right));
   });
+}
+
+function pinnedThreadActivityAt(
+  thread: PinnedThreadRecord,
+  activityByKey: Readonly<Record<string, ThreadActivitySummary>>,
+) {
+  const liveActivity = activityByKey[pinnedThreadKey(thread)]?.updatedAt;
+  return typeof liveActivity === "number" && Number.isFinite(liveActivity)
+    ? liveActivity
+    : Number(thread.updatedAt ?? 0);
 }
 
 export function threadKey(hostId: number, threadId: string) {
