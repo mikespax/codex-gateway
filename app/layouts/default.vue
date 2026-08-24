@@ -58,7 +58,7 @@ onBeforeUnmount(() => {
         <GatewaySidebar />
         <div
           data-testid="sidebar-resize-handle"
-          class="group/sidebar-resize absolute inset-y-0 right-0 z-30 hidden w-2 cursor-col-resize md:block"
+          class="group/sidebar-resize absolute inset-y-0 right-0 z-30 hidden w-3 cursor-col-resize touch-none select-none border-r border-transparent bg-transparent transition-colors hover:border-primary/70 hover:bg-primary/15 md:block"
           :class="{ 'bg-primary/30': resizingSidebar }"
           title="Drag to resize sidebar; double-click to reset"
           @dblclick="resetSidebarWidth"
