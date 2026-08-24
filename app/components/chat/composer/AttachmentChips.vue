@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import {
   Attachment,
-  AttachmentInfo,
   AttachmentPreview,
   AttachmentRemove,
   Attachments,
@@ -23,17 +22,23 @@ const presentations = computed(() => props.files.map(presentComposerAttachment))
 </script>
 
 <template>
-  <Attachments v-if="presentations.length" variant="inline" class="mb-2 max-w-full">
+  <Attachments v-if="presentations.length" variant="grid" class="mb-2 max-w-full justify-start">
     <Attachment
       v-for="attachment in presentations"
       :key="attachment.id"
       :data="attachment.data"
-      class="max-w-full"
+      class="h-28 w-28 overflow-hidden rounded-xl border border-border bg-muted md:h-36 md:w-36"
       @remove="emit('remove', attachment.id)"
     >
-      <AttachmentPreview />
-      <AttachmentInfo class="max-w-48" />
-      <!-- AI Elements hides inline removal until hover; touch users need a persistent target. -->
+      <AttachmentPreview class="size-full" />
+      <div
+        v-if="attachment.data.type === 'file'"
+        class="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded bg-background/80 px-1.5 py-0.5 text-[10px] text-foreground backdrop-blur-sm"
+        :title="attachment.data.filename"
+      >
+        {{ attachment.data.filename }}
+      </div>
+      <!-- Keep removal available without requiring a precise tiny inline target. -->
       <AttachmentRemove :label="t('app.removeAttachment')" class="opacity-100" />
     </Attachment>
   </Attachments>
