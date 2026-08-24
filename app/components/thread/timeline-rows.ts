@@ -1,6 +1,7 @@
 import type { ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
 import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
+import { commandDisplayLabel } from "@/utils/thread-item-display";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
 
@@ -21,6 +22,7 @@ export type ThreadTimelineRow =
       turnId: string;
       count: number;
       open: boolean;
+      preview: string;
     }
   | {
       key: string;
@@ -69,6 +71,7 @@ export function buildThreadTimelineRows(input: {
         turnId: turn.id,
         count: sections.intermediateItems.length,
         open: intermediateOpen,
+        preview: intermediatePreview(sections.intermediateItems),
       });
       if (intermediateOpen) {
         appendItemRows(
@@ -126,6 +129,17 @@ export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   return estimatedItemHeights[row.item.type] ?? 96;
 }
 
+function intermediatePreview(items: ThreadTimelineItem[]) {
+  const latest = items.at(-1);
+  if (!latest) return "";
+  if (latest.type === "commandExecution") {
+    return commandDisplayLabel(latest.command).replace(/\s+/g, " ").slice(0, 140);
+  }
+  if (latest.type === "reasoning") return "Thinking…";
+  const text = "text" in latest && typeof latest.text === "string" ? latest.text : "";
+  return text.replace(/\s+/g, " ").slice(0, 140) || latest.type;
+}
+
 function appendItemRows(
   rows: ThreadTimelineRow[],
   threadId: string | null,
@@ -167,7 +181,12 @@ function hasTimingValue(timing: DisplayedTurnTiming) {
 function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
   if (left.type !== right.type) return false;
   if (left.type === "intermediateHeader" && right.type === "intermediateHeader") {
-    return left.count === right.count && left.open === right.open && left.turnId === right.turnId;
+    return (
+      left.count === right.count &&
+      left.open === right.open &&
+      left.preview === right.preview &&
+      left.turnId === right.turnId
+    );
   }
   if (left.type === "item" && right.type === "item") {
     // App-server deltas mutate this reactive item proxy in place. Reuse the lightweight row wrapper
