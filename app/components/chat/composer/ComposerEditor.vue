@@ -332,7 +332,16 @@ function dismissMenu() {
 .composer-editor .cm-editor {
   max-height: min(28dvh, 10rem);
   min-height: 3.25rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
   background: transparent;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+.composer-editor:focus-within .cm-editor {
+  border-color: color-mix(in srgb, var(--primary) 80%, var(--hairline));
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent),
+    0 0 18px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 .composer-editor .cm-scroller {
   overflow: auto;
@@ -343,7 +352,7 @@ function dismissMenu() {
   padding: 0.5rem 0.25rem;
   font-size: 1rem;
   line-height: 1.5rem;
-  caret-color: var(--ink);
+  caret-color: var(--primary);
 }
 .composer-editor .cm-focused {
   outline: none;
