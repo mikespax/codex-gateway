@@ -463,6 +463,7 @@
     "commandOutput": "命令输出",
     "waitingCommandOutput": "等待命令输出...",
     "intermediateSteps": "中间过程",
+    "collapseIntermediateSteps": "收起中间过程",
     "copyAgentOutput": "复制输出",
     "agentOutputCopied": "输出已复制",
     "copyAgentOutputFailed": "复制输出失败",

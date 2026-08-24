@@ -463,6 +463,7 @@
     "commandOutput": "Command output",
     "waitingCommandOutput": "Waiting for command output...",
     "intermediateSteps": "Intermediate steps",
+    "collapseIntermediateSteps": "Collapse intermediate steps",
     "copyAgentOutput": "Copy output",
     "agentOutputCopied": "Output copied",
     "copyAgentOutputFailed": "Failed to copy output",

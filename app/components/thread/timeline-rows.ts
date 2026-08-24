@@ -23,6 +23,7 @@ export type ThreadTimelineRow =
       count: number;
       open: boolean;
       preview: string;
+      footer?: boolean;
     }
   | {
       key: string;
@@ -82,6 +83,15 @@ export function buildThreadTimelineRows(input: {
           sections.intermediateItems,
           sections,
         );
+        rows.push({
+          key: `${input.threadId}:turn-${turn.id}:intermediate-footer`,
+          type: "intermediateHeader",
+          turnId: turn.id,
+          count: sections.intermediateItems.length,
+          open: true,
+          preview: "",
+          footer: true,
+        });
       }
     }
 
@@ -185,6 +195,7 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.count === right.count &&
       left.open === right.open &&
       left.preview === right.preview &&
+      left.footer === right.footer &&
       left.turnId === right.turnId
     );
   }
