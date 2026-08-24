@@ -186,6 +186,7 @@ export function useComposerController() {
     uploadingAttachments: attachmentUpload.uploadingAttachments,
     handleAttachmentChange: attachmentUpload.handleAttachmentChange,
     handlePaste: attachmentUpload.handlePaste,
+    handleDrop: attachmentUpload.handleDrop,
     removeAttachment: attachmentUpload.removeAttachment,
     openAttachmentPicker: attachmentUpload.openAttachmentPicker,
     planModeActive: submit.planModeActive,

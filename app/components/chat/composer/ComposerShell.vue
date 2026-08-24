@@ -66,6 +66,7 @@ const emit = defineEmits<{
   hoverSlashCommand: [index: number];
   selectSlashCommand: [command: SlashMenuItem];
   attachmentChange: [event: Event];
+  drop: [event: DragEvent];
   paste: [event: ClipboardEvent];
   removeAttachment: [id: string];
   keydown: [event: KeyboardEvent];
@@ -77,9 +78,51 @@ const emit = defineEmits<{
 }>();
 
 const uploadInput = ref<HTMLInputElement | null>(null);
+const isDraggingFiles = ref(false);
 
 function openAttachmentPicker() {
   uploadInput.value?.click();
+}
+
+function dragContainsFiles(event: DragEvent) {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+function handleDragEnter(event: DragEvent) {
+  if (!dragContainsFiles(event)) return;
+  event.preventDefault();
+  isDraggingFiles.value = true;
+}
+
+function handleDragOver(event: DragEvent) {
+  if (!dragContainsFiles(event)) return;
+  event.preventDefault();
+  isDraggingFiles.value = true;
+}
+
+function handleDragLeave(event: DragEvent) {
+  if (!dragContainsFiles(event)) return;
+  const composer = event.currentTarget;
+  const nextTarget = event.relatedTarget;
+  if (
+    composer instanceof HTMLElement &&
+    nextTarget instanceof Node &&
+    composer.contains(nextTarget)
+  ) {
+    return;
+  }
+  isDraggingFiles.value = false;
+}
+
+function resetDragState() {
+  isDraggingFiles.value = false;
+}
+
+function handleDrop(event: DragEvent) {
+  isDraggingFiles.value = false;
+  if (!dragContainsFiles(event)) return;
+  event.preventDefault();
+  emit("drop", event);
 }
 
 function composerScopeKey() {
@@ -114,7 +157,16 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         @clear-goal="emit('clearGoal')"
       />
       <div
-        class="relative rounded-[1.35rem] border border-hairline bg-surface p-2 shadow-lg shadow-ink/10 md:rounded-3xl md:p-[clamp(0.45rem,1vw,0.7rem)]"
+        class="relative rounded-[1.35rem] border border-hairline bg-surface p-2 shadow-lg shadow-ink/10 transition-colors md:rounded-3xl md:p-[clamp(0.45rem,1vw,0.7rem)]"
+        :class="{
+          'border-primary bg-primary/5 shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_25%,transparent)]':
+            isDraggingFiles,
+        }"
+        @dragenter="handleDragEnter"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+        @dragend="resetDragState"
+        @drop="handleDrop"
       >
         <SlashCommandMenu
           :open="slashMenuOpen"
@@ -131,6 +183,12 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           @change="emit('attachmentChange', $event)"
         />
         <AttachmentChips :files="attachedFiles" @remove="emit('removeAttachment', $event)" />
+        <div
+          v-if="isDraggingFiles"
+          class="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[1rem] border border-dashed border-primary bg-surface/90 text-sm font-medium text-primary"
+        >
+          Drop screenshot or file to attach
+        </div>
         <ComposerEditor
           :key="composerScopeKey()"
           :model-value="modelValue"
