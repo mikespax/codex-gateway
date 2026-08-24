@@ -16,6 +16,9 @@ function codexPathBootstrap(options: { requireCodex: boolean }) {
   return [
     'codex_gateway_path_add() { if [ -d "$1" ]; then case ":$PATH:" in *":$1:"*) ;; *) PATH="$PATH:$1" ;; esac; fi; };',
     'for dir in "${CODEX_INSTALL_DIR:-$HOME/.local/bin}" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/.bun/bin" "$HOME/.nvm/current/bin" "$HOME/.nvm/versions/node"/*/bin /opt/homebrew/bin /opt/node/bin /usr/local/bin /usr/bin; do codex_gateway_path_add "$dir"; done; export PATH;',
+    // Older macOS SSH sessions can inherit a low descriptor limit; a Codex
+    // app-server needs more than that to index an established session store.
+    'if [ "$(ulimit -Sn 2>/dev/null || echo 0)" -lt 8192 ] 2>/dev/null; then ulimit -n 8192 2>/dev/null || true; fi;',
     modernNodePathBootstrap(),
     'CODEX_BIN="$(command -v codex 2>/dev/null || true)";',
     'if [ -z "$CODEX_BIN" ] && [ -x "${CODEX_INSTALL_DIR:-$HOME/.local/bin}/codex" ]; then CODEX_BIN="${CODEX_INSTALL_DIR:-$HOME/.local/bin}/codex"; fi;',

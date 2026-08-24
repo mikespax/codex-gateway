@@ -44,7 +44,7 @@ export default defineNuxtConfig({
     },
   },
   i18n: {
-    defaultLocale: "zh",
+    defaultLocale: "en",
     strategy: "no_prefix",
     detectBrowserLanguage: false,
     locales: [

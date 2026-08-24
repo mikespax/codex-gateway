@@ -16,7 +16,7 @@ export function useThreadSettingsControls() {
   const { selectedThreadId } = storeToRefs(navigation);
   const newThreadModel = ref("");
   const newThreadEffort = ref<ReasoningEffort>("default");
-  const newThreadApprovalMode = ref<ApprovalPolicy | "custom">("custom");
+  const newThreadApprovalMode = ref<ApprovalPolicy | "custom">("never");
 
   // Existing-thread controls are computed proxies over the per-thread Pinia state. Do not mirror
   // them into local refs with bidirectional watchers: thread selection, snapshot hydration, and the

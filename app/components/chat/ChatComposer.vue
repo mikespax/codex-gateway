@@ -20,6 +20,7 @@ const {
   goalInputActive,
   handleAttachmentChange,
   handleComposerKeydown,
+  handleDrop,
   handlePaste,
   handlePrimaryAction,
   hasComposerInput,
@@ -100,6 +101,7 @@ const {
     @hover-slash-command="selectSlashCommandIndex"
     @select-slash-command="runSlashCommand"
     @attachment-change="handleAttachmentChange"
+    @drop="handleDrop"
     @paste="handlePaste"
     @remove-attachment="removeAttachment"
     @keydown="handleComposerKeydown"
