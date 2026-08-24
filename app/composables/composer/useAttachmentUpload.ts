@@ -14,6 +14,8 @@ export function useAttachmentUpload(
   const { t } = useI18n();
   const uploadInputRef = ref<HTMLInputElement | null>(null);
   const uploadingAttachments = ref(false);
+  let pendingFileAdds = Promise.resolve();
+  let pendingBatchCount = 0;
 
   function openAttachmentPicker() {
     uploadInputRef.value?.click();
@@ -32,15 +34,15 @@ export function useAttachmentUpload(
     });
   }
 
-  async function addFiles(files: File[]) {
-    const sessionIsCurrent = captureSessionEpoch();
+  async function addFiles(files: File[], sessionIsCurrent: () => boolean) {
     const images = files.filter((file) => file.type.startsWith("image/"));
     const otherFiles = files.filter((file) => !file.type.startsWith("image/"));
+    const imageAttachments: ComposerAttachment[] = [];
 
     for (const file of images) {
       const dataUrl = await dataUrlFromFile(file);
       if (!sessionIsCurrent()) return;
-      attachedFiles.value.push({
+      imageAttachments.push({
         id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${file.name}`,
         name: file.name || "pasted-image.png",
         path: "",
@@ -51,12 +53,13 @@ export function useAttachmentUpload(
       });
     }
 
+    if (imageAttachments.length > 0) attachedFiles.value.push(...imageAttachments);
+
     if (otherFiles.length === 0 || selectedHostId.value === null) {
       return;
     }
 
     const hostId = selectedHostId.value;
-    uploadingAttachments.value = true;
     try {
       const form = new FormData();
       for (const file of otherFiles) {
@@ -80,15 +83,34 @@ export function useAttachmentUpload(
         messageFromError(error, t("app.uploadAttachmentFailed"), errorMessageLabels(t)),
         { hostId },
       );
-    } finally {
-      if (sessionIsCurrent()) uploadingAttachments.value = false;
     }
+  }
+
+  function queueFiles(files: File[]) {
+    if (files.length === 0) return;
+    const sessionIsCurrent = captureSessionEpoch();
+    pendingBatchCount += 1;
+    uploadingAttachments.value = true;
+    pendingFileAdds = pendingFileAdds
+      .catch(() => undefined)
+      .then(() => addFiles(files, sessionIsCurrent))
+      .catch((error: unknown) => {
+        if (!sessionIsCurrent()) return;
+        store.setError(
+          messageFromError(error, t("app.uploadAttachmentFailed"), errorMessageLabels(t)),
+          { hostId: selectedHostId.value },
+        );
+      })
+      .finally(() => {
+        pendingBatchCount = Math.max(0, pendingBatchCount - 1);
+        uploadingAttachments.value = pendingBatchCount > 0;
+      });
   }
 
   function handleAttachmentChange(event: Event) {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
-    void addFiles(Array.from(input.files ?? []));
+    queueFiles(Array.from(input.files ?? []));
     input.value = "";
   }
 
@@ -98,7 +120,14 @@ export function useAttachmentUpload(
       return;
     }
     event.preventDefault();
-    void addFiles(files);
+    queueFiles(files);
+  }
+
+  function handleDrop(event: DragEvent) {
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    event.preventDefault();
+    queueFiles(files);
   }
 
   function removeAttachment(id: string) {
@@ -111,6 +140,7 @@ export function useAttachmentUpload(
     openAttachmentPicker,
     handleAttachmentChange,
     handlePaste,
+    handleDrop,
     removeAttachment,
   };
 }
