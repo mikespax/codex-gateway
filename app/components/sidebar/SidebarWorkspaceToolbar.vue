@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ActivityIcon, ChartNoAxesCombinedIcon, GlobeIcon, TerminalIcon } from "@lucide/vue";
+import { ActivityIcon, ChartNoAxesCombinedIcon, GlobeIcon, PlusIcon, TerminalIcon } from "@lucide/vue";
 import { Button } from "@codex-gateway/ui/button";
 import { SidebarTrigger } from "@codex-gateway/ui/sidebar";
 
@@ -9,6 +9,7 @@ const emit = defineEmits<{
   openBrowser: [];
   openTmux: [];
   openHostMonitor: [];
+  newThread: [];
 }>();
 </script>
 
@@ -68,6 +69,18 @@ const emit = defineEmits<{
       @click="emit('openBrowser')"
     >
       <GlobeIcon class="size-4" />
+    </Button>
+    <Button
+      data-testid="new-thread-button"
+      variant="ghost"
+      size="icon"
+      class="size-8 shrink-0"
+      :disabled="!canLaunch"
+      :title="$t('app.newThread')"
+      :aria-label="$t('app.newThread')"
+      @click="emit('newThread')"
+    >
+      <PlusIcon class="size-4" />
     </Button>
     <SidebarTrigger
       data-testid="desktop-sidebar-collapse"

@@ -15,6 +15,7 @@ import { useLongPressContextMenu } from "@/composables/interactions/useLongPress
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
+import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import AddProjectDialog from "./AddProjectDialog.vue";
 import HostTree from "./host-tree/HostTree.vue";
 import PinnedThreadList from "./thread-list/PinnedThreadList.vue";
@@ -32,6 +33,7 @@ import type { HostRecord, ProjectRecord } from "./sidebar-types";
 
 const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
+const threadView = useGatewayThreadViewStore();
 withDefaults(defineProps<{ workspaceToolbar?: boolean }>(), { workspaceToolbar: true });
 const { t } = useI18n();
 const showSettings = ref(false);
@@ -121,6 +123,7 @@ async function openHostMonitor(hostId: number) {
       @open-terminal="workspaceActions.openTerminal"
       @open-browser="showBrowserDialog = true"
       @open-host-monitor="workspaceActions.openHostMonitor"
+      @new-thread="threadView.startThread()"
     />
     <div class="flex min-h-0 flex-1 overflow-hidden px-3 py-3">
       <SidebarScrollArea>
