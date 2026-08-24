@@ -28,6 +28,7 @@ export function registerThreadProjectionSubscribers() {
     useGatewayThreadRuntimeStore().setThreadStatus(event.hostId, event.threadId, event.status, {
       turnId: event.turnId,
     });
+    useGatewayThreadActivityStore().touchThread(event.hostId, event.threadId);
   });
   gatewayDomainEvents.on("terminal-process-detected", rememberActiveTerminalProcess);
   gatewayDomainEvents.on("terminal-process-completed", clearActiveTerminalProcess);

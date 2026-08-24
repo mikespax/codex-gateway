@@ -122,6 +122,16 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     observedRunningThreadKeys.value = [...observedRunningThreadKeys.value, key];
   }
 
+  function touchThread(hostId: number, threadId: string) {
+    const key = pinnedKey(hostId, threadId);
+    const existing = summariesByKey.value[key];
+    if (existing === undefined) return;
+    summariesByKey.value = {
+      ...summariesByKey.value,
+      [key]: { ...existing, updatedAt: Math.floor(Date.now() / 1000) },
+    };
+  }
+
   function updateTitle(hostId: number, threadId: string, title: string) {
     const key = pinnedKey(hostId, threadId);
     const existing = summariesByKey.value[key];
@@ -145,6 +155,7 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     upsertGatewayThread,
     upsertAppServerThread,
     recordRuntimeStatus,
+    touchThread,
     updateTitle,
     resetState,
   };
