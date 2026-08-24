@@ -325,7 +325,12 @@ function dismissMenu() {
     @hover="selectedIndex = $event"
     @select="selectFile"
   />
-  <div ref="container" data-testid="composer-editor" class="composer-editor" />
+  <div
+    ref="container"
+    data-testid="composer-editor"
+    class="composer-editor relative"
+    :class="{ 'composer-empty': !modelValue }"
+  />
 </template>
 
 <style>
@@ -336,6 +341,29 @@ function dismissMenu() {
   border-radius: 0.25rem;
   background: transparent;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+.composer-editor.composer-empty:not(:focus-within)::before {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.25rem;
+  z-index: 1;
+  width: 2px;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--primary);
+  content: "";
+  pointer-events: none;
+  animation: composer-caret-blink 1.05s steps(1, end) infinite;
+}
+@keyframes composer-caret-blink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  49%,
+  100% {
+    opacity: 0.15;
+  }
 }
 .composer-editor:focus-within .cm-editor {
   border-color: var(--primary);
