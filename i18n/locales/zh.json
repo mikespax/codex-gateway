@@ -18,6 +18,8 @@
     "automations": "自动化",
     "pinned": "已固定",
     "recentlyRunning": "最近运行",
+    "recentChats": "最近聊天 · 7天",
+    "noRecentChats": "最近7天没有聊天",
     "activeSubAgents": "活动子代理",
     "subAgentInput": "发送给子代理的消息",
     "noThreads": "暂无会话",

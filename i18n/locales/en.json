@@ -18,6 +18,8 @@
     "automations": "Automations",
     "pinned": "Pinned",
     "recentlyRunning": "Recently running",
+    "recentChats": "Recent chats · 7 days",
+    "noRecentChats": "No chats from the last 7 days",
     "activeSubAgents": "Active sub-agents",
     "subAgentInput": "Message sent to sub-agent",
     "noThreads": "No threads",

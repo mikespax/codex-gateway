@@ -18,23 +18,23 @@ export function useRecentThreadActivity() {
   const runtime = useGatewayThreadRuntimeStore();
   const threadView = useGatewayThreadViewStore();
   const activity = useGatewayThreadActivityStore();
-  const { summariesByKey, observedRunningThreadKeys } = storeToRefs(activity);
+  const { summariesByKey } = storeToRefs(activity);
   const { hosts } = storeToRefs(catalog);
   const pinnedThreads = useGatewayPinnedThreads();
   const { threadStatuses, unviewedCompletedThreadKeys } = storeToRefs(runtime);
 
   const recentThreads = computed(() => {
+    const cutoff = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
     const pinnedKeys = new Set(
       pinnedThreads.value.map((thread) => pinnedKey(thread.hostId, thread.threadId)),
     );
     const unviewedKeys = new Set(unviewedCompletedThreadKeys.value);
-    return observedRunningThreadKeys.value
-      .map((key) => summariesByKey.value[key])
+    return Object.values(summariesByKey.value)
       .filter(
         (thread): thread is ThreadActivitySummary =>
-          // app-server parentThreadId is the authoritative sub-agent marker.
-          // Sub-agents stay in their parent workspace rather than flooding this list.
-          thread !== undefined && !thread.isSubAgent && !pinnedKeys.has(keyFor(thread)),
+          // app-server parentThreadId is the authoritative sub-agent marker. Sub-agents stay in
+          // their parent workspace rather than flooding the cross-host list.
+          !thread.isSubAgent && thread.updatedAt >= cutoff,
       )
       .map((thread) => ({
         ...thread,
@@ -42,6 +42,7 @@ export function useRecentThreadActivity() {
         hostName: hosts.value.find((host) => host.id === thread.hostId)?.name ?? null,
         status: threadStatuses.value[keyFor(thread)] ?? "idle",
         completionAttention: unviewedKeys.has(keyFor(thread)),
+        pinned: pinnedKeys.has(keyFor(thread)),
       }))
       .sort((left, right) => {
         const runningOrder = Number(right.status === "running") - Number(left.status === "running");
@@ -56,8 +57,8 @@ export function useRecentThreadActivity() {
     });
   }
 
-  function pinRecentThread(thread: ThreadActivitySummary) {
-    void navigation.setPinnedThread(toPinnedThread(thread), true);
+  function pinRecentThread(thread: ThreadActivitySummary & { pinned: boolean }) {
+    void navigation.setPinnedThread(toPinnedThread(thread), !thread.pinned);
   }
 
   return {

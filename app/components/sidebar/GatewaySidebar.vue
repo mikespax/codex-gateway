@@ -64,6 +64,7 @@ const { activeCount: tmuxActiveCount } = tmuxLauncher;
 const inactivePinnedKeys = ref<Record<string, boolean>>({});
 const activePinnedExpanded = ref(true);
 const inactivePinnedExpanded = ref(false);
+const recentChatsExpanded = ref(true);
 const hostsExpanded = ref(true);
 const activePinnedThreads = computed(() =>
   pinnedThreads.value.filter((thread) => !inactivePinnedKeys.value[pinnedThreadKey(thread)]),
@@ -103,7 +104,12 @@ const hostTreeController = computed<HostTreeController>(() => ({
 function persistSidebarSections() {
   localStorage.setItem(
     SIDEBAR_SECTIONS_KEY,
-    JSON.stringify({ activePinnedExpanded: activePinnedExpanded.value, inactivePinnedExpanded: inactivePinnedExpanded.value, hostsExpanded: hostsExpanded.value }),
+    JSON.stringify({
+      activePinnedExpanded: activePinnedExpanded.value,
+      inactivePinnedExpanded: inactivePinnedExpanded.value,
+      recentChatsExpanded: recentChatsExpanded.value,
+      hostsExpanded: hostsExpanded.value,
+    }),
   );
 }
 
@@ -125,6 +131,7 @@ onMounted(() => {
     if (sections && typeof sections === "object") {
       if (typeof sections.activePinnedExpanded === "boolean") activePinnedExpanded.value = sections.activePinnedExpanded;
       if (typeof sections.inactivePinnedExpanded === "boolean") inactivePinnedExpanded.value = sections.inactivePinnedExpanded;
+      if (typeof sections.recentChatsExpanded === "boolean") recentChatsExpanded.value = sections.recentChatsExpanded;
       if (typeof sections.hostsExpanded === "boolean") hostsExpanded.value = sections.hostsExpanded;
     }
   } catch {
@@ -233,9 +240,11 @@ async function openHostMonitor(hostId: number) {
             :selected-host-id="selectedHostId"
             :selected-thread-id="selectedThreadId"
             :long-press-handlers="longPressContextMenuHandlers"
+            :expanded="recentChatsExpanded"
             @open="recentActivity.openRecentThread"
             @pin="recentActivity.pinRecentThread"
             @rename="threadRename.startRename"
+            @toggle="recentChatsExpanded = !recentChatsExpanded; persistSidebarSections()"
           />
 
           <section class="flex min-w-0 max-w-full flex-col overflow-hidden">
