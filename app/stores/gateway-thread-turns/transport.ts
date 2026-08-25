@@ -45,6 +45,7 @@ export function requestTurnSteer(input: {
   expectedTurnId: string;
   text: string;
   clientUserMessageId: string;
+  cwd: string;
   options: ComposerTurnOptions;
 }) {
   return useGatewayRealtimeStore().request(
@@ -57,6 +58,7 @@ export function requestTurnSteer(input: {
       expectedTurnId: input.expectedTurnId,
       text: input.text,
       clientUserMessageId: input.clientUserMessageId,
+      cwd: input.cwd,
       images: input.options.images ?? [],
       references: input.options.references ?? [],
     }),

@@ -1,4 +1,8 @@
-import type { ComposerTurnOptions } from "~~/shared/types";
+import type {
+  ComposerTurnOptions,
+  ProjectDirectoryAvailability,
+  ProjectRecord,
+} from "~~/shared/types";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
@@ -6,8 +10,13 @@ import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
-import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
-import { requestScrollToLatest } from "@/stores/gateway/thread-open/view-state";
+import {
+  errorMessageLabels,
+  messageFromError,
+  pinnedKey,
+} from "@/stores/gateway/thread-utils/identity";
+import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity";
+import { requestScrollToLatest, syncSelectedRoute } from "@/stores/gateway/thread-open/view-state";
 import {
   createClientUserMessageId,
   optimisticUserContent,
@@ -57,13 +66,29 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
     insertOptimisticNewTurnMessage(threadId, clientUserMessageId, optimisticContent);
   }
 
-  const projectId = navigation.selectedProjectId;
-  if (projectId === null) {
+  const selectedProjectId = navigation.selectedProjectId;
+  const threadCwd =
+    useGatewayThreadActivityStore().summariesByKey[pinnedKey(hostId, threadId)]?.cwd;
+  const project = resolveTurnProject({
+    projects: catalog.projects,
+    availability: catalog.projectDirectoryAvailability,
+    hostId,
+    hostUsername: catalog.hosts.find((host) => host.id === hostId)?.username ?? null,
+    selectedProjectId,
+    threadCwd,
+  });
+  if (project === undefined) {
     gateway.setError(t("app.projectRequiredForFileReferences"), { hostId, threadId });
     if (!shouldSteerActiveTurn) runtimeStore.setThreadStatus(hostId, threadId, "completed");
     return;
   }
-  const cwd = catalog.projects.find((project) => project.id === projectId)?.remotePath ?? null;
+  const projectId = project.id;
+  // Heal stale route/cache state so later actions cannot keep submitting a foreign host project.
+  if (navigation.selectedProjectId !== projectId) {
+    navigation.selectedProjectId = projectId;
+    syncSelectedRoute({ replace: true });
+  }
+  const cwd = project.remotePath;
   const requestKind = shouldSteerActiveTurn ? "steer" : "start";
   const executeTurnRequest =
     steerTurnId !== null
@@ -75,6 +100,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
             expectedTurnId: steerTurnId,
             text,
             clientUserMessageId,
+            cwd,
             options,
           })
       : () =>
@@ -119,6 +145,47 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
   } finally {
     if (sessionIsCurrent()) views.loading = false;
   }
+}
+
+function resolveTurnProject(input: {
+  projects: ProjectRecord[];
+  availability: Record<number, ProjectDirectoryAvailability>;
+  hostId: number;
+  hostUsername: string | null;
+  selectedProjectId: number | null;
+  threadCwd: string | null | undefined;
+}) {
+  const hostProjects = input.projects.filter((project) => project.hostId === input.hostId);
+  const isUsable = (project: ProjectRecord) => input.availability[project.id] !== "missing";
+  const selected = hostProjects.find(
+    (project) => project.id === input.selectedProjectId && isUsable(project),
+  );
+  if (selected !== undefined) return selected;
+
+  const matchingCwd = hostProjects.find(
+    (project) => project.remotePath === input.threadCwd && isUsable(project),
+  );
+  if (matchingCwd !== undefined) return matchingCwd;
+
+  return hostProjects
+    .filter((project) => input.availability[project.id] === "available")
+    .sort(
+      (left, right) =>
+        fallbackProjectRank(left, input.hostUsername) -
+          fallbackProjectRank(right, input.hostUsername) || left.id - right.id,
+    )[0];
+}
+
+function fallbackProjectRank(project: ProjectRecord, username: string | null) {
+  const homePaths =
+    username === null
+      ? []
+      : username === "root"
+        ? ["/root"]
+        : [`/Users/${username}`, `/home/${username}`];
+  if (homePaths.includes(project.remotePath)) return 0;
+  if (project.remotePath.endsWith("/.codex")) return 1;
+  return 10 + project.remotePath.split("/").filter(Boolean).length;
 }
 
 function applyAcceptedTurnResult(

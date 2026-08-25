@@ -38,6 +38,7 @@ export function useRecentThreadActivity() {
       )
       .map((thread) => ({
         ...thread,
+        ...resolvedProjectFields(thread),
         id: thread.threadId,
         hostName: hosts.value.find((host) => host.id === thread.hostId)?.name ?? null,
         status: threadStatuses.value[keyFor(thread)] ?? "idle",
@@ -55,6 +56,18 @@ export function useRecentThreadActivity() {
       hostId: thread.hostId,
       projectId: thread.projectId,
     });
+  }
+
+  function resolvedProjectFields(thread: ThreadActivitySummary) {
+    const project = catalog.projects.find(
+      (candidate) =>
+        candidate.hostId === thread.hostId &&
+        (candidate.id === thread.projectId || candidate.remotePath === thread.cwd),
+    );
+    return {
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? thread.projectName,
+    };
   }
 
   function pinRecentThread(thread: ThreadActivitySummary & { pinned: boolean }) {

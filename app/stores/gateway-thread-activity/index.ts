@@ -74,7 +74,9 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
       );
       upsertSummary({
         hostId,
-        projectId: record.projectId ?? project?.id ?? null,
+        // App-server metadata can carry a project id from a different Gateway host catalog.
+        // Only retain the id after resolving it against this host (or its matching cwd).
+        projectId: project?.id ?? null,
         threadId: record.id,
         title: firstNonEmptyString([record.title, record.name, record.preview]) ?? record.id,
         cwd: stringOrNull(record.cwd),
@@ -168,7 +170,7 @@ function summaryFromGatewayThread(
   const project = projects.find(
     (candidate) => candidate.id === thread.projectId && candidate.hostId === thread.hostId,
   );
-  return summaryFromThread(thread.hostId, thread, project, thread.projectId, thread.title);
+  return summaryFromThread(thread.hostId, thread, project, project?.id ?? null, thread.title);
 }
 
 function summaryFromAppServerThread(

@@ -67,6 +67,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         ...requestIdField,
         ...threadScopeFields,
         projectId: positiveId.nullable().optional(),
+        cwd: nullableString,
         limit: positiveId.optional(),
       })
       .strict(),
@@ -139,6 +140,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         expectedTurnId: nonEmptyString,
         text: z.string(),
         clientUserMessageId: nullableString,
+        cwd: nullableString,
         images: z.array(imageInput).optional(),
         references: z
           .array(

@@ -62,6 +62,7 @@ export type RealtimeClientMessage =
       requestId: string;
       hostId: number;
       projectId?: number | null;
+      cwd?: string | null;
       threadId: string;
       limit?: number;
     }
@@ -122,6 +123,7 @@ export type RealtimeClientMessage =
       expectedTurnId: string;
       text: string;
       clientUserMessageId?: string | null;
+      cwd?: string | null;
       images?: ComposerTurnOptions["images"];
       references?: ComposerTurnOptions["references"];
     }

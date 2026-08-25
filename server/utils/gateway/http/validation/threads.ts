@@ -15,6 +15,7 @@ export const threadListSchema = z.object({
 export const threadOpenSchema = z.object({
   hostId: z.coerce.number().int().positive(),
   projectId: optionalPositiveInt,
+  cwd: z.string().trim().nullable().optional(),
   threadId: z.string().trim().min(1),
   limit: z.coerce.number().int().min(1).max(100).default(INITIAL_TURN_PAGE_LIMIT),
 });
@@ -122,6 +123,7 @@ export const turnSteerSchema = z.object({
   expectedTurnId: z.string().trim().min(1),
   text: z.string().trim().default(""),
   clientUserMessageId: z.string().trim().nullable().optional(),
+  cwd: z.string().trim().nullable().optional(),
   images: z.array(imageInputSchema).default([]),
   references: z.array(fileReferenceSchema).max(10).default([]),
 });

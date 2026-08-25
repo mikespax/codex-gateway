@@ -43,6 +43,7 @@ export class ThreadOpenService {
     projectId: number | null,
     limit = INITIAL_TURN_PAGE_LIMIT,
     activationController?: ThreadController,
+    projectCwd?: string | null,
   ) {
     const cachedSnapshot = threadSnapshotStore.get(host.id, threadId);
     if (cachedSnapshot) {
@@ -54,7 +55,7 @@ export class ThreadOpenService {
         // that policy made long conversations slow while their realtime controller was healthy.
         // Only an absent or too-shallow cache requires remote history I/O; reconnect gaps already
         // use the authoritative refresh path explicitly.
-        return this.snapshotResult(host, threadId, projectId, cachedSnapshot);
+        return this.snapshotResult(host, threadId, projectId, cachedSnapshot, projectCwd);
       }
       runtimeLog("thread cache depth refresh", {
         hostId: host.id,
@@ -62,7 +63,14 @@ export class ThreadOpenService {
         cachedTurns: threadTurnsFromHistory(cachedSnapshot.history).length,
         requestedTurns: limit,
       });
-      return this.refreshThreadState(host, threadId, projectId, limit, activationController);
+      return this.refreshThreadState(
+        host,
+        threadId,
+        projectId,
+        limit,
+        activationController,
+        projectCwd,
+      );
     }
 
     runtimeLog("thread cache miss", {
@@ -70,7 +78,14 @@ export class ThreadOpenService {
       threadId,
       limit,
     });
-    return this.refreshThreadState(host, threadId, projectId, limit, activationController);
+    return this.refreshThreadState(
+      host,
+      threadId,
+      projectId,
+      limit,
+      activationController,
+      projectCwd,
+    );
   }
 
   startedThreadResult(host: HostRecord, projectId: number | null, rawResult: unknown) {
@@ -129,6 +144,7 @@ export class ThreadOpenService {
     projectId: number | null,
     limit = INITIAL_TURN_PAGE_LIMIT,
     activationController?: ThreadController,
+    projectCwd?: string | null,
   ): Promise<ReturnTypeResult> {
     const key = refreshKey(host.id, threadId);
     const pending = this.pendingRefreshes.get(key);
@@ -139,7 +155,14 @@ export class ThreadOpenService {
       // same store entry.
       if (pending.limit >= limit) return pending.promise;
       await pending.promise;
-      return this.refreshThreadState(host, threadId, projectId, limit, activationController);
+      return this.refreshThreadState(
+        host,
+        threadId,
+        projectId,
+        limit,
+        activationController,
+        projectCwd,
+      );
     }
 
     const promise = this.performThreadStateRefresh(
@@ -148,6 +171,7 @@ export class ThreadOpenService {
       projectId,
       limit,
       activationController,
+      projectCwd,
     );
     this.pendingRefreshes.set(key, { limit, promise });
     try {
@@ -191,6 +215,7 @@ export class ThreadOpenService {
     projectId: number | null,
     limit: number,
     activationController?: ThreadController,
+    projectCwd?: string | null,
   ) {
     const { snapshot, resolvedProjectId } = await this.loadRemoteOpenSnapshot(
       host,
@@ -198,6 +223,7 @@ export class ThreadOpenService {
       projectId,
       limit,
       activationController,
+      projectCwd,
     );
     const status = runtimeStatusFromSnapshotState(snapshot.thread, snapshot.history) ?? "completed";
     // The refresh event is the backend's canonical correction after reconnect
@@ -228,9 +254,15 @@ export class ThreadOpenService {
     threadId: string,
     projectId: number | null,
     snapshot: ThreadOpenSnapshot,
+    projectCwd?: string | null,
   ) {
     const recentEvents = gatewayEventStore.list(host.id, threadId, 0, 200);
-    const resolvedProjectId = snapshot.projectId ?? projectId;
+    const resolvedProjectId = resolveProjectId(
+      host.id,
+      projectId ?? snapshot.projectId,
+      snapshot.thread.cwd,
+      projectCwd,
+    );
     runtimeLog("thread cache hit", {
       hostId: host.id,
       threadId,
@@ -255,6 +287,7 @@ export class ThreadOpenService {
     projectId: number | null,
     limit: number,
     activationController?: ThreadController,
+    projectCwd?: string | null,
   ) {
     if (activationController !== undefined) {
       const resumed = await activationController.resumeWithInitialTurnsPage(limit);
@@ -269,6 +302,7 @@ export class ThreadOpenService {
         initialTurnsPage,
         extractThreadSettings(resumed),
         activationController,
+        projectCwd,
       );
     }
 
@@ -302,6 +336,8 @@ export class ThreadOpenService {
       read.thread,
       initialTurnsPage,
       latestThreadSettingsFromEvents(gatewayEventStore.list(host.id, threadId, 0, 200)),
+      undefined,
+      projectCwd,
     );
   }
 
@@ -312,9 +348,10 @@ export class ThreadOpenService {
     initialTurnsPage: ReturnType<typeof parseTurnsPage>,
     threadSettings: ReturnType<typeof extractThreadSettings> | null,
     activationController?: ThreadController,
+    projectCwd?: string | null,
   ) {
     const threadId = thread.id;
-    const resolvedProjectId = resolveProjectId(host.id, projectId, thread.cwd);
+    const resolvedProjectId = resolveProjectId(host.id, projectId, thread.cwd, projectCwd);
     threadMetadataStore.record(host.id, resolvedProjectId, thread);
 
     const recentEvents = gatewayEventStore.list(host.id, threadId, 0, 200);
@@ -361,11 +398,27 @@ function refreshKey(hostId: number, threadId: string) {
   return `${userId}:${hostId}:${threadId}`;
 }
 
-function resolveProjectId(hostId: number, projectId: number | null, cwd: unknown) {
-  if (projectId !== null || typeof cwd !== "string" || cwd.trim() === "") {
-    return projectId;
+function resolveProjectId(
+  hostId: number,
+  projectId: number | null,
+  cwd: unknown,
+  projectCwd?: string | null,
+) {
+  const requestedPath = normalizedPath(projectCwd);
+  if (requestedPath !== null) {
+    const requested = projectStore
+      .list(hostId)
+      .find((project) => project.remotePath === requestedPath);
+    if (requested !== undefined) return requested.id;
   }
+  const selected = projectId === null ? null : projectStore.get(projectId);
+  if (requestedPath === null && selected?.hostId === hostId) return selected.id;
+  if (typeof cwd !== "string" || cwd.trim() === "") return null;
   return projectStore.ensureForPath(hostId, cwd).id;
+}
+
+function normalizedPath(value: unknown) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
 function snapshotRecentEvents() {

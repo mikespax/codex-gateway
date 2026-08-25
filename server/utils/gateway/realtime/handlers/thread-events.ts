@@ -59,6 +59,7 @@ export async function activateThread(
       input.projectId ?? null,
       input.limit,
       activationController,
+      input.cwd,
     );
     sendRealtimePeerMessage(peer, {
       type: "thread.snapshot",

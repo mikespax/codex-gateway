@@ -31,6 +31,7 @@ export function requestActivateThreadSnapshot(input: {
       requestId,
       hostId: input.hostId,
       projectId: input.projectId,
+      cwd: projectById(useGatewayCatalogStore().projects, input.projectId)?.remotePath,
       threadId: input.threadId,
       limit: input.limit ?? INITIAL_TURN_PAGE_LIMIT,
     }),
