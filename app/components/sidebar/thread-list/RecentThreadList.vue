@@ -29,8 +29,9 @@ const emit = defineEmits<{
 }>();
 
 function subtitle(thread: RecentThread) {
+  const folder = thread.cwd?.split("/").filter(Boolean).at(-1) ?? null;
   return (
-    [thread.hostName, thread.projectName].filter(Boolean).join(" / ") ||
+    [thread.hostName, thread.projectName ?? folder].filter(Boolean).join(" / ") ||
     formatRelative(thread.updatedAt)
   );
 }
