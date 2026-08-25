@@ -46,6 +46,41 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
     return;
   }
 
+  const selectedProjectId = navigation.selectedProjectId;
+  const resolveCurrentProject = () =>
+    resolveTurnProject({
+      projects: catalog.projects,
+      availability: catalog.projectDirectoryAvailability,
+      hostId,
+      hostUsername: catalog.hosts.find((host) => host.id === hostId)?.username ?? null,
+      selectedProjectId,
+      threadCwd: useGatewayThreadActivityStore().summariesByKey[pinnedKey(hostId, threadId)]?.cwd,
+    });
+  let project = resolveCurrentProject();
+  if (project === undefined) {
+    // A route can select a thread before background host discovery has populated the project
+    // catalog. Treat the first submit as a readiness boundary instead of rejecting it and forcing
+    // the user to send the same message again after hydration happens to finish.
+    await navigation.refreshHostProjects(hostId);
+    if (
+      !sessionIsCurrent() ||
+      navigation.selectedHostId !== hostId ||
+      navigation.selectedThreadId !== threadId
+    )
+      return;
+    project = resolveCurrentProject();
+  }
+  if (project === undefined) {
+    gateway.setError(t("app.projectRequiredForFileReferences"), { hostId, threadId });
+    return;
+  }
+  const projectId = project.id;
+  // Heal stale route/cache state so later actions cannot keep submitting a foreign host project.
+  if (navigation.selectedProjectId !== projectId) {
+    navigation.selectedProjectId = projectId;
+    syncSelectedRoute({ replace: true });
+  }
+  const cwd = project.remotePath;
   const runtime = runtimeStore.threadRuntimeProjection(hostId, threadId);
   const steerTurnId = runtime.canSteer ? runtime.activeTurnId : null;
   const shouldSteerActiveTurn = steerTurnId !== null;
@@ -66,29 +101,6 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
     insertOptimisticNewTurnMessage(threadId, clientUserMessageId, optimisticContent);
   }
 
-  const selectedProjectId = navigation.selectedProjectId;
-  const threadCwd =
-    useGatewayThreadActivityStore().summariesByKey[pinnedKey(hostId, threadId)]?.cwd;
-  const project = resolveTurnProject({
-    projects: catalog.projects,
-    availability: catalog.projectDirectoryAvailability,
-    hostId,
-    hostUsername: catalog.hosts.find((host) => host.id === hostId)?.username ?? null,
-    selectedProjectId,
-    threadCwd,
-  });
-  if (project === undefined) {
-    gateway.setError(t("app.projectRequiredForFileReferences"), { hostId, threadId });
-    if (!shouldSteerActiveTurn) runtimeStore.setThreadStatus(hostId, threadId, "completed");
-    return;
-  }
-  const projectId = project.id;
-  // Heal stale route/cache state so later actions cannot keep submitting a foreign host project.
-  if (navigation.selectedProjectId !== projectId) {
-    navigation.selectedProjectId = projectId;
-    syncSelectedRoute({ replace: true });
-  }
-  const cwd = project.remotePath;
   const requestKind = shouldSteerActiveTurn ? "steer" : "start";
   const executeTurnRequest =
     steerTurnId !== null
