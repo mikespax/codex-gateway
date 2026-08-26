@@ -25,6 +25,7 @@ const emit = defineEmits<{
     :open="props.row.open"
     :count="props.row.count"
     :preview="props.row.preview"
+    :prompt-preview="props.row.promptPreview"
     :footer="props.row.footer"
     @toggle="emit('intermediateToggle', props.row.turnId, $event)"
   />

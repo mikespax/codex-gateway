@@ -54,6 +54,7 @@ const loading = ref(false);
 const searchError = ref<string | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
+let viewportFrame: number | null = null;
 let syncing = false;
 
 class FileReferenceWidget extends WidgetType {
@@ -80,14 +81,32 @@ onMounted(() => {
     parent: container.value,
     state: EditorState.create({ doc: props.modelValue, extensions: extensions() }),
   });
+  window.visualViewport?.addEventListener("resize", queueSelectionIntoView);
+  window.visualViewport?.addEventListener("scroll", queueSelectionIntoView);
 });
 
 onBeforeUnmount(() => {
   if (searchTimer) clearTimeout(searchTimer);
+  if (viewportFrame !== null) cancelAnimationFrame(viewportFrame);
+  window.visualViewport?.removeEventListener("resize", queueSelectionIntoView);
+  window.visualViewport?.removeEventListener("scroll", queueSelectionIntoView);
   searchController?.abort();
   view.value?.destroy();
   view.value = null;
 });
+
+function queueSelectionIntoView() {
+  if (viewportFrame !== null) cancelAnimationFrame(viewportFrame);
+  viewportFrame = requestAnimationFrame(() => {
+    viewportFrame = null;
+    const editor = view.value;
+    if (!editor?.hasFocus) return;
+    editor.requestMeasure();
+    editor.dispatch({
+      effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: "nearest" }),
+    });
+  });
+}
 
 watch(
   () => props.modelValue,
@@ -149,6 +168,10 @@ function extensions(): Extension[] {
         paste: (event) => {
           emit("paste", event);
           return event.defaultPrevented;
+        },
+        focus: () => {
+          queueSelectionIntoView();
+          return false;
         },
       }),
     ),
@@ -340,7 +363,10 @@ function dismissMenu() {
   border: 1px solid transparent;
   border-radius: 0.25rem;
   background: transparent;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 .composer-editor.composer-empty:not(:focus-within)::before {
   position: absolute;
@@ -368,11 +394,14 @@ function dismissMenu() {
 .composer-editor:focus-within .cm-editor {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent),
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent),
     0 0 18px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 .composer-editor .cm-scroller {
   overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 1rem;
   font-family: inherit;
 }
 .composer-editor .cm-content {
@@ -409,6 +438,15 @@ function dismissMenu() {
   font-size: 0.875rem;
   vertical-align: baseline;
   white-space: nowrap;
+}
+@media (max-width: 47.999rem) {
+  .composer-editor:focus-within .cm-editor,
+  .composer-editor:focus-within .cm-content {
+    min-height: min(32dvh, 12rem);
+  }
+  .composer-editor:focus-within .cm-editor {
+    max-height: min(48dvh, 18rem);
+  }
 }
 @media (min-width: 48rem) {
   .composer-editor .cm-editor {

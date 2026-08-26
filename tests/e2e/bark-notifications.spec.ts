@@ -18,14 +18,16 @@ test("Bark sends ordinary turn notifications and only notifies when an app-serve
   const threadId = await remoteWorkspace.startThread(project.id);
 
   await sendTextTurn(page, `E2E 普通通知 ${Date.now()}`);
-  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
-    timeout: 120_000,
-  });
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Completed|已完成/,
+    { timeout: 120_000 },
+  );
   await expect.poll(async () => (await bark.readRequests()).length, { timeout: 30_000 }).toBe(1);
-  expect((await bark.readRequests())[0]?.title).toContain("回合已结束");
-  const turnToast = page.locator("[data-sonner-toast]").filter({ hasText: "回合已结束" });
+  expect((await bark.readRequests())[0]?.title).toContain("Turn finished");
+  const turnToast = page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" });
   await expect(turnToast).toBeVisible();
-  await turnToast.getByRole("button", { name: "打开会话" }).click();
+  await turnToast.getByRole("button", { name: /Open thread|打开会话/ }).click();
   await expect(page).toHaveURL(new RegExp(`threadId=${threadId}`));
 
   await sendRealtimeRequest(page, {
@@ -51,10 +53,12 @@ test("Bark sends ordinary turn notifications and only notifies when an app-serve
   });
   await expect.poll(async () => (await bark.readRequests()).length, { timeout: 30_000 }).toBe(2);
   const requests = await bark.readRequests();
-  expect(requests[1]?.title).toContain("目标已结束");
-  expect(requests[1]?.body).toContain("推进");
+  expect(requests[1]?.title).toContain("Goal finished");
+  expect(requests[1]?.body).toContain("Ran for");
   expect(requests[1]?.body).toContain("tokens");
-  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "目标已结束" })).toBeVisible();
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Goal finished" }),
+  ).toBeVisible();
 });
 
 test("Bark keeps monitoring an active main turn after the last browser closes", async ({
@@ -100,7 +104,7 @@ test("Bark keeps monitoring an active main turn after the last browser closes", 
   // The background monitor must own it until turn/completed so VS Code-only and closed-page
   // workflows receive the same completion notification as an open Gateway page.
   await expect.poll(async () => (await bark.readRequests()).length, { timeout: 60_000 }).toBe(1);
-  expect((await bark.readRequests())[0]?.title).toContain("回合已结束");
+  expect((await bark.readRequests())[0]?.title).toContain("Turn finished");
 });
 
 test("plan-mode user questions render and notify through Sonner and Bark", async ({
@@ -128,10 +132,12 @@ test("plan-mode user questions render and notify through Sonner and Bark", async
 
   const requestCard = page.getByTestId("chat-scroll-area").getByText(question, { exact: true });
   await expect(requestCard).toBeVisible({ timeout: 120_000 });
-  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "等待回答" })).toBeVisible();
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Awaiting your response" }),
+  ).toBeVisible();
   await expect.poll(async () => (await bark.readRequests()).length, { timeout: 30_000 }).toBe(1);
   const request = (await bark.readRequests())[0];
-  expect(request?.title).toContain("等待回答");
+  expect(request?.title).toContain("Awaiting your response");
   expect(request?.body).toContain(hostName);
   expect(request?.body).toContain(question);
   expect(request?.id).toMatch(/^[A-Za-z0-9_-]{43}$/);

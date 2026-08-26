@@ -140,7 +140,8 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
 
 <template>
   <div
-    class="shrink-0 bg-gradient-to-t from-surface via-surface to-surface/75 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] md:px-[clamp(1rem,3vw,2rem)] md:pb-[clamp(0.5rem,1.4vh,1rem)]"
+    data-testid="composer-shell"
+    class="shrink-0 bg-gradient-to-t from-surface via-surface to-surface/75 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-[padding] focus-within:pb-[calc(env(safe-area-inset-bottom)+1rem)] md:px-[clamp(1rem,3vw,2rem)] md:pb-[clamp(0.5rem,1.4vh,1rem)] md:focus-within:pb-[clamp(0.5rem,1.4vh,1rem)]"
   >
     <div class="mx-auto w-full max-w-3xl">
       <ComposerModeStrip
@@ -157,6 +158,7 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         @clear-goal="emit('clearGoal')"
       />
       <div
+        data-testid="composer-surface"
         class="relative rounded-[1.35rem] border border-hairline bg-surface p-2 shadow-lg shadow-ink/10 transition-colors md:rounded-3xl md:p-[clamp(0.45rem,1vw,0.7rem)]"
         :class="{
           'border-primary bg-primary/5 shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_25%,transparent)]':

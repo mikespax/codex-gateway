@@ -33,10 +33,12 @@ const delegatedProps = reactiveOmit(props, "class", "toastOptions");
     }"
     :toast-options="{
       classes: {
-        toast: 'max-h-48 overflow-hidden rounded-md',
-        content: 'min-w-0',
+        toast: 'max-h-48 overflow-hidden rounded-md max-sm:flex-wrap max-sm:items-start',
+        content: 'min-w-0 flex-1',
         title: 'max-h-32 overflow-auto whitespace-pre-wrap break-words',
         description: 'max-h-24 overflow-auto whitespace-pre-wrap break-words',
+        actionButton:
+          'max-sm:mt-2! max-sm:ml-0! max-sm:h-8! max-sm:basis-full max-sm:justify-center max-sm:whitespace-normal',
       },
     }"
     v-bind="delegatedProps"

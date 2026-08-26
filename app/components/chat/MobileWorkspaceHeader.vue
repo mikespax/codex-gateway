@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ActivityIcon, ChartNoAxesCombinedIcon, GlobeIcon, TerminalIcon } from "@lucide/vue";
 import { Button } from "@codex-gateway/ui/button";
+import CodexUsageBadge from "@/components/chat/CodexUsageBadge.vue";
 
 defineProps<{
+  hostId: number | null;
   canOpenTerminal: boolean;
   tmuxActiveCount: number;
 }>();
@@ -23,6 +25,7 @@ const emit = defineEmits<{
       <slot name="start" />
     </div>
     <div class="relative z-10 ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+      <CodexUsageBadge :host-id="hostId" />
       <Button
         data-testid="open-tmux-mobile-button"
         variant="ghost"

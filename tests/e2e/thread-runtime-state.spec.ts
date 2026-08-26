@@ -21,8 +21,26 @@ const storedRouteSelectionSchema = z.object({
 });
 
 test("opening completed history does not show fake thinking", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        write: async () => undefined,
+      },
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: (command: string) => {
+        if (command === "copy" && document.activeElement instanceof HTMLTextAreaElement) {
+          Reflect.set(window, "__copiedAgentResponse", document.activeElement.value);
+        }
+        return true;
+      },
+    });
+  });
   await openApp(page);
   const threadId = "e2e-completed-thread";
+  const fullAgentResponse = "done\n\nA complete second paragraph.";
   const startedEvent = {
     id: 1,
     hostId: 1,
@@ -56,7 +74,7 @@ test("opening completed history does not show fake thinking", async ({ page }) =
         id: "agent-1",
         type: "agentMessage",
         phase: "final_answer",
-        text: "done",
+        text: fullAgentResponse,
       },
     ],
   });
@@ -84,29 +102,42 @@ test("opening completed history does not show fake thinking", async ({ page }) =
     status: "running",
   });
 
-  await expect(page.getByText("completed history")).toBeVisible();
-  await expect(page.getByRole("button", { name: /中间过程/ })).toHaveAttribute(
+  await expect(page.getByText("completed history").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveAttribute(
     "data-state",
-    "open",
+    "closed",
   );
   await expect(page.getByTestId("agent-message-actions")).toHaveCount(0);
-  await expect(page.getByText(/本轮用时/)).toHaveCount(0);
+  await expect(page.getByText(/Turn duration|本轮用时/)).toHaveCount(0);
 
   await applyGatewayLiveEvent(page, completedEvent);
 
-  await expect(page.getByRole("button", { name: /中间过程/ })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveAttribute(
     "data-state",
     "closed",
   );
   const agentActions = page.getByTestId("agent-message-actions");
-  await expect(agentActions).toBeAttached();
-  await page.getByText("done", { exact: true }).hover();
+  await expect(agentActions).toBeVisible();
   await expect
     .poll(() => agentActions.evaluate((element) => getComputedStyle(element).opacity))
     .toBe("1");
-  await expect(agentActions.getByText("本轮用时 2.50s")).toBeVisible();
-  await expect(agentActions.getByRole("button", { name: "复制输出" })).toBeAttached();
-  await expect(page.getByText("思考中")).toBeHidden();
+  await expect(agentActions.getByText(/Turn duration 2\.50s|本轮用时 2\.50s/)).toBeVisible();
+  const copyResponseButton = agentActions.getByRole("button", {
+    name: /Copy full response|复制完整回复/,
+  });
+  await expect(copyResponseButton).toBeVisible();
+  await copyResponseButton.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as typeof window & { __copiedAgentResponse?: string }).__copiedAgentResponse,
+      ),
+    )
+    .toBe(fullAgentResponse);
+  await expect(
+    page.locator("[data-sonner-toast]").getByText(/Full response copied|完整回复已复制/),
+  ).toBeVisible();
+  await expect(page.getByText(/Thinking|思考中/)).toBeHidden();
 
   await seedGatewayThread(page, {
     threadId: "e2e-stale-running-history-thread",
@@ -119,7 +150,10 @@ test("opening completed history does not show fake thinking", async ({ page }) =
     },
     status: "completed",
   });
-  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成");
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Completed|已完成/,
+  );
 });
 
 test("opening a cached thread applies terminal events before deriving composer state", async ({

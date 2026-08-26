@@ -41,7 +41,33 @@ import {
 } from "./helpers/remote-codex";
 
 test("uses the mobile layout with hidden sidebar and usable composer shell", async ({ page }) => {
+  await page.route("**/api/hosts/1/codex-usage", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        hostId: 1,
+        limitId: "codex",
+        limitName: "Codex",
+        planType: "pro",
+        primary: {
+          usedPercent: 27,
+          remainingPercent: 73,
+          windowDurationMins: 300,
+          resetsAt: null,
+        },
+        secondary: null,
+        observedAt: Date.now(),
+      }),
+    });
+  });
   await openApp(page);
+  const threadId = "mobile-header-usage";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile header usage" },
+  });
 
   await expect(page.getByTestId("mobile-layout")).toBeVisible();
   await expect(page.getByTestId("desktop-layout")).toBeHidden();
@@ -53,7 +79,135 @@ test("uses the mobile layout with hidden sidebar and usable composer shell", asy
   await expect(page.getByTestId("settings-toggle")).toBeHidden();
 
   await expect(page.getByTestId("chat-scroll-area")).toBeVisible();
-  await expect(page.getByText("先选择一个项目")).toBeVisible();
+  await expect(page.getByTestId("codex-usage-badge")).toHaveText("73%");
+  await expect(page.getByTestId("codex-usage-badge")).toHaveAttribute("aria-label", /73%/);
+});
+
+test("expands the focused composer in a keyboard-sized mobile viewport", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-focused-composer";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile focused composer" },
+  });
+
+  const composer = page.getByTestId("composer-input");
+  await composer.fill(
+    Array.from(
+      { length: 18 },
+      (_, index) => `Draft line ${index + 1} stays reviewable while the mobile keyboard is open.`,
+    ).join("\n"),
+  );
+  await composer.focus();
+  await page.setViewportSize({ width: 393, height: 520 });
+  await waitForAnimationFrames(page, 3);
+
+  const metrics = await composer.evaluate((element) => {
+    const editor = element.closest<HTMLElement>(".cm-editor");
+    const scroller = editor?.querySelector<HTMLElement>(".cm-scroller");
+    const selection = window.getSelection();
+    const caret =
+      selection && selection.rangeCount > 0
+        ? selection.getRangeAt(0).getBoundingClientRect()
+        : null;
+    const editorBox = editor?.getBoundingClientRect();
+    const scrollerBox = scroller?.getBoundingClientRect();
+    return {
+      caretBottom: caret?.bottom ?? null,
+      caretTop: caret?.top ?? null,
+      editorBottom: editorBox?.bottom ?? null,
+      editorHeight: editorBox?.height ?? 0,
+      scrollTop: scroller?.scrollTop ?? 0,
+      scrollerBottom: scrollerBox?.bottom ?? null,
+      scrollerTop: scrollerBox?.top ?? null,
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  expect(metrics.editorHeight).toBeGreaterThan(metrics.viewportHeight * 0.28);
+  expect(metrics.editorHeight).toBeLessThanOrEqual(metrics.viewportHeight * 0.5);
+  expect(metrics.editorBottom).not.toBeNull();
+  expect(metrics.editorBottom!).toBeLessThanOrEqual(metrics.viewportHeight);
+  expect(metrics.scrollTop).toBeGreaterThan(0);
+  expect(metrics.caretTop).not.toBeNull();
+  expect(metrics.caretBottom).not.toBeNull();
+  expect(metrics.scrollerTop).not.toBeNull();
+  expect(metrics.scrollerBottom).not.toBeNull();
+  expect(metrics.caretTop!).toBeGreaterThanOrEqual(metrics.scrollerTop!);
+  expect(metrics.caretBottom!).toBeLessThanOrEqual(metrics.scrollerBottom!);
+
+  const composerSurfaceBox = await page.getByTestId("composer-surface").boundingBox();
+  expect(composerSurfaceBox).not.toBeNull();
+  expect(
+    metrics.viewportHeight - composerSurfaceBox!.y - composerSurfaceBox!.height,
+  ).toBeGreaterThanOrEqual(15);
+});
+
+test("recalls the latest request above active intermediate work", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-active-request-recall";
+  const latestRequest = [
+    "Audit the production workflow and preserve the existing safety gates.",
+    "Keep customer sends disabled while validating the current worker, queue, and dashboard state.",
+    "Report the evidence and the safest next action before changing any external service.",
+  ].join(" ");
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Active request recall" },
+    status: "running",
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "active-request-recall-turn",
+            status: "inProgress",
+            items: [
+              {
+                id: "active-request-recall-user",
+                type: "userMessage",
+                content: [{ type: "text", text: latestRequest }],
+              },
+              {
+                id: "active-request-recall-reasoning",
+                type: "reasoning",
+                status: "inProgress",
+                summary: ["Checking the current production state"],
+              },
+              {
+                id: "active-request-recall-search",
+                type: "webSearch",
+                status: "inProgress",
+                query: "current production notification layout and mobile background activity",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  const recall = page.getByTestId("active-prompt-recall");
+  const recallText = page.getByTestId("active-prompt-recall-text");
+  const intermediateToggle = recall.locator("xpath=following-sibling::button[1]");
+  const intermediatePreview = page.getByTestId("intermediate-steps-preview");
+  await expect(recall).toBeVisible();
+  await expect(recallText).toContainText(latestRequest.slice(0, 80));
+  await expect(recallText).toHaveCSS("-webkit-line-clamp", "2");
+  await expect(intermediateToggle).toBeVisible();
+  await expect(intermediatePreview).toContainText("Checking the current production state");
+  await expect(intermediatePreview).toContainText("current production notification layout");
+  await expect(intermediatePreview).toHaveCSS("-webkit-line-clamp", "2");
+
+  const [recallBox, toggleBox] = await Promise.all([
+    recall.boundingBox(),
+    intermediateToggle.boundingBox(),
+  ]);
+  expect(recallBox).not.toBeNull();
+  expect(toggleBox).not.toBeNull();
+  expect(recallBox!.y + recallBox!.height).toBeLessThanOrEqual(toggleBox!.y);
 });
 
 test("shows effort and compact context usage without mobile approval controls", async ({

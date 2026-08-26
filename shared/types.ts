@@ -34,6 +34,7 @@ export type {
   ReasoningEffort,
 } from "./types/thread";
 export type { ModelListResult, ModelRecord } from "./types/models";
+export type { CodexRateLimitSummary, CodexRateLimitWindow } from "./types/account-usage";
 export type { TerminalOpenTarget, TerminalScope, TerminalSessionSnapshot } from "./types/terminal";
 export type {
   BrowserPreviewResourceFailure,

@@ -38,14 +38,14 @@ export async function useBarkReceiver() {
 
 export async function configureBarkNotifications(page: Page, serverUrl: string) {
   await page.getByTestId("settings-toggle").click();
-  await page.getByRole("tab", { name: "通知" }).click();
-  const barkSwitch = page.getByRole("switch", { name: "启用 Bark" });
+  await page.getByRole("tab", { name: /Notifications|通知/ }).click();
+  const barkSwitch = page.getByRole("switch", { name: /Enable Bark|启用 Bark/ });
   if ((await barkSwitch.getAttribute("aria-checked")) !== "true") await barkSwitch.click();
-  await page.getByLabel("Bark 服务地址").fill(serverUrl);
-  await page.getByLabel("Bark 设备 Key").fill("e2e-device-key");
-  await page.getByLabel("Bark 分组").fill("E2E Group");
-  await page.getByRole("button", { name: "保存通知设置" }).click();
-  await expect(page.getByText("通知设置已保存")).toBeVisible();
+  await page.getByLabel(/Bark server URL|Bark 服务地址/).fill(serverUrl);
+  await page.getByLabel(/Bark device key|Bark 设备 Key/).fill("e2e-device-key");
+  await page.getByLabel(/Bark group|Bark 分组/).fill("E2E Group");
+  await page.getByRole("button", { name: /Save notification settings|保存通知设置/ }).click();
+  await expect(page.getByText(/Notification settings saved|通知设置已保存/)).toBeVisible();
 }
 
 async function readBarkRequests(logPath: string) {

@@ -1,5 +1,6 @@
 import type { ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
+import { threadItemText } from "@/utils/thread-items";
 import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
 import { commandDisplayLabel } from "@/utils/thread-item-display";
 
@@ -23,6 +24,7 @@ export type ThreadTimelineRow =
       count: number;
       open: boolean;
       preview: string;
+      promptPreview?: string;
       footer?: boolean;
     }
   | {
@@ -73,6 +75,7 @@ export function buildThreadTimelineRows(input: {
         count: sections.intermediateItems.length,
         open: intermediateOpen,
         preview: intermediatePreview(sections.intermediateItems),
+        promptPreview: sections.turnIsActive ? latestUserPromptPreview(sections.items) : undefined,
       });
       if (intermediateOpen) {
         appendItemRows(
@@ -134,20 +137,44 @@ export function reuseUnchangedTimelineRows(
 
 export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   if (row === undefined) return 96;
-  if (row.type === "intermediateHeader") return 48;
+  if (row.type === "intermediateHeader") {
+    return row.promptPreview !== undefined && row.promptPreview !== "" ? 136 : 72;
+  }
   if (row.type === "turnDuration") return 28;
   return estimatedItemHeights[row.item.type] ?? 96;
 }
 
 function intermediatePreview(items: ThreadTimelineItem[]) {
-  const latest = items.at(-1);
-  if (!latest) return "";
-  if (latest.type === "commandExecution") {
-    return commandDisplayLabel(latest.command).replace(/\s+/g, " ").slice(0, 140);
+  return items
+    .slice(-2)
+    .map(intermediateItemPreview)
+    .filter((value, index, values) => value !== "" && values.indexOf(value) === index)
+    .join(" · ")
+    .slice(0, 240);
+}
+
+function intermediateItemPreview(item: ThreadTimelineItem) {
+  if (item.type === "commandExecution") {
+    return commandDisplayLabel(item.command).replace(/\s+/g, " ");
   }
-  if (latest.type === "reasoning") return "Thinking…";
-  const text = "text" in latest && typeof latest.text === "string" ? latest.text : "";
-  return text.replace(/\s+/g, " ").slice(0, 140) || latest.type;
+  if (item.type === "reasoning") {
+    return threadItemText(item).replace(/\s+/g, " ").trim() || "Thinking…";
+  }
+  if (item.type === "webSearch") {
+    return typeof item.query === "string" && item.query.trim() !== ""
+      ? item.query.replace(/\s+/g, " ").trim()
+      : "Web search";
+  }
+  const text = "text" in item && typeof item.text === "string" ? item.text : "";
+  return text.replace(/\s+/g, " ").trim() || item.type;
+}
+
+function latestUserPromptPreview(items: ThreadTimelineItem[]) {
+  const userMessage = items.findLast((item) => item.type === "userMessage");
+  if (!userMessage) return undefined;
+  const text = threadItemText(userMessage).replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  return text.length > 220 ? `${text.slice(0, 219).trimEnd()}…` : text;
 }
 
 function appendItemRows(
@@ -195,6 +222,7 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.count === right.count &&
       left.open === right.open &&
       left.preview === right.preview &&
+      left.promptPreview === right.promptPreview &&
       left.footer === right.footer &&
       left.turnId === right.turnId
     );

@@ -117,6 +117,7 @@ function tabContextMenu({ panel, api }: GetTabContextMenuItemsParams) {
   >
     <MobileWorkspaceHeader
       v-if="layout === 'mobile'"
+      :host-id="workspace.selectedHostId.value"
       :can-open-terminal="workspace.canOpenTerminal.value"
       :tmux-active-count="tmuxLauncher.activeCount.value"
       @open-tmux="tmuxLauncher.open"
