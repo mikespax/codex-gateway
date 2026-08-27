@@ -112,6 +112,8 @@ function resetFollowLatest() {
   void chatVirtualizer.scrollToLatest();
 }
 
+defineExpose({ scrollToLatest: resetFollowLatest });
+
 // TanStack's ResizeObserver owns actual viewport changes and dynamic row measurements. These
 // watchers only reconnect the direct Vue adapter after Dockview or the browser hid a still-mounted
 // panel. They intentionally do not add another resize listener, restore a DOM anchor, or write

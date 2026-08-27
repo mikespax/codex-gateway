@@ -36,6 +36,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const composer = useGatewayComposerStore();
 const userDetachedFromLatest = ref(false);
+const timelineViewport = ref<InstanceType<typeof VirtualTimelineViewport> | null>(null);
 const projectId = computed(() => props.projectId ?? null);
 const planModeActive = computed(() => selectedThreadMode() === "plan");
 const threadIsRunning = computed(() => props.threadStatus === "running");
@@ -106,6 +107,13 @@ function handleUserDetachedChange(detached: boolean) {
   userDetachedFromLatest.value = detached;
 }
 
+function handleIntermediateToggle(turnId: string, open: boolean) {
+  setIntermediateOpen(turnId, open);
+  // Opening active work is an explicit request to watch it. Reclaim the latest edge once, then
+  // TanStack follows subsequent streaming and measurement updates until the reader scrolls away.
+  if (open && threadIsRunning.value) timelineViewport.value?.scrollToLatest();
+}
+
 function estimateRowSize(row: unknown) {
   return estimateThreadTimelineRow(row as ThreadTimelineRow | undefined);
 }
@@ -133,6 +141,7 @@ watch(
   -->
   <VirtualTimelineViewport
     :key="threadId ?? 'empty-thread'"
+    ref="timelineViewport"
     :rows="rows"
     :estimate-size="estimateRowSize"
     :scroll-to-latest-token="scrollToLatestToken"
@@ -158,7 +167,7 @@ watch(
         :row="timelineRow(row)"
         :host-id="hostId"
         :thread-id="threadId"
-        @intermediate-toggle="setIntermediateOpen"
+        @intermediate-toggle="handleIntermediateToggle"
       />
     </template>
   </VirtualTimelineViewport>

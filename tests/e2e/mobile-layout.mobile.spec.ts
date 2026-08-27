@@ -144,6 +144,29 @@ test("expands the focused composer in a keyboard-sized mobile viewport", async (
   ).toBeGreaterThanOrEqual(15);
 });
 
+test("keeps plain Enter multiline and enables browser text assistance", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-multiline-composer";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile multiline composer" },
+  });
+
+  const composer = page.getByTestId("composer-input");
+  await expect(composer).toHaveAttribute("spellcheck", "true");
+  await expect(composer).toHaveAttribute("autocapitalize", "sentences");
+  await expect(composer).toHaveAttribute("autocorrect", "on");
+  await expect(composer).toHaveAttribute("enterkeyhint", "enter");
+
+  await composer.fill("Keep this draft");
+  await composer.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("on a second line");
+
+  await expect(composer).toHaveAttribute("data-value", "Keep this draft\non a second line");
+});
+
 test("recalls the latest request above active intermediate work", async ({ page }) => {
   await openApp(page);
   const threadId = "mobile-active-request-recall";

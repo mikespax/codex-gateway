@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import type {
   ApprovalPolicy,
   ModelRecord,
@@ -79,6 +79,44 @@ const emit = defineEmits<{
 
 const uploadInput = ref<HTMLInputElement | null>(null);
 const isDraggingFiles = ref(false);
+const keyboardInset = ref(0);
+let restingVisualViewportHeight = 0;
+let visualViewport: VisualViewport | null = null;
+
+function syncKeyboardInset() {
+  const viewport = visualViewport;
+  if (!viewport) return;
+
+  const viewportHeight = viewport.height;
+  const layoutHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
+  const coveredHeight = Math.max(0, layoutHeight - viewportHeight - viewport.offsetTop);
+  const heightDelta = Math.max(0, restingVisualViewportHeight - viewportHeight);
+  const keyboardVisible = Math.max(coveredHeight, heightDelta) > 80;
+
+  if (!keyboardVisible) {
+    restingVisualViewportHeight = viewportHeight;
+    keyboardInset.value = 0;
+    return;
+  }
+
+  // resizes-content browsers already move the app above the keyboard, so retain a comfortable
+  // 1rem gap. Overlaying browsers additionally need their covered visual-viewport height.
+  keyboardInset.value = Math.max(16, Math.round(coveredHeight) + 16);
+}
+
+onMounted(() => {
+  visualViewport = window.visualViewport;
+  if (!visualViewport) return;
+  restingVisualViewportHeight = visualViewport.height;
+  visualViewport.addEventListener("resize", syncKeyboardInset);
+  visualViewport.addEventListener("scroll", syncKeyboardInset);
+});
+
+onBeforeUnmount(() => {
+  visualViewport?.removeEventListener("resize", syncKeyboardInset);
+  visualViewport?.removeEventListener("scroll", syncKeyboardInset);
+  visualViewport = null;
+});
 
 function openAttachmentPicker() {
   uploadInput.value?.click();
@@ -141,7 +179,10 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
 <template>
   <div
     data-testid="composer-shell"
-    class="shrink-0 bg-gradient-to-t from-surface via-surface to-surface/75 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-[padding] focus-within:pb-[calc(env(safe-area-inset-bottom)+1rem)] md:px-[clamp(1rem,3vw,2rem)] md:pb-[clamp(0.5rem,1.4vh,1rem)] md:focus-within:pb-[clamp(0.5rem,1.4vh,1rem)]"
+    class="shrink-0 bg-gradient-to-t from-surface via-surface to-surface/75 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-[padding,margin] focus-within:pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-[clamp(1rem,3vw,2rem)] md:pb-[clamp(0.5rem,1.4vh,1rem)] md:focus-within:pb-[clamp(0.5rem,1.4vh,1rem)]"
+    :style="{ marginBottom: keyboardInset > 0 ? `${keyboardInset}px` : undefined }"
+    :data-keyboard-inset="keyboardInset"
+    @focusin="syncKeyboardInset"
   >
     <div class="mx-auto w-full max-w-3xl">
       <ComposerModeStrip

@@ -178,6 +178,11 @@ function extensions(): Extension[] {
     EditorView.contentAttributes.of({
       "aria-label": props.placeholder,
       placeholder: props.placeholder,
+      spellcheck: "true",
+      autocapitalize: "sentences",
+      autocorrect: "on",
+      inputmode: "text",
+      enterkeyhint: "enter",
       "data-testid": "composer-input",
       "data-value": props.modelValue,
     }),

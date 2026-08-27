@@ -143,14 +143,8 @@ export function useComposerController() {
     if (slashCommandsState.handleKeydown(event)) {
       return;
     }
-    if (event.key !== "Enter" || event.shiftKey) {
-      return;
-    }
-    event.preventDefault();
-    if (selectedThreadId.value === null) {
-      return;
-    }
-    void submitComposer();
+    // The editor is deliberately multiline. Enter inserts a newline; sending remains an explicit
+    // toolbar action so mobile keyboards do not submit a half-written prompt.
   }
 
   function handlePrimaryAction() {
