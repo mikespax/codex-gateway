@@ -68,6 +68,9 @@ const { isIntermediateOpen, setIntermediateOpen } = useIntermediateStepsDisclosu
   threadIsRunning,
   autoCollapseIntermediate,
 });
+const activeIntermediateIsOpen = computed(() =>
+  disclosureTurns.value.some((turn) => turn.turnIsActive && isIntermediateOpen(turn.id)),
+);
 const rows = computed<ThreadTimelineRow[]>((previous) => {
   const timelineTurns = turnStates.value.map(({ turn, sections }) => ({
     turn,
@@ -121,6 +124,19 @@ function estimateRowSize(row: unknown) {
 function timelineRow(row: unknown) {
   return row as ThreadTimelineRow;
 }
+
+watch(
+  [rows, threadIsRunning, activeIntermediateIsOpen],
+  ([, running, intermediateOpen]) => {
+    // Expanded live work is a deliberate "watch" mode. Ask the viewport to reclaim the latest
+    // edge after every rendered delta so dynamic terminal cards and measurements cannot strand
+    // the newest step below the composer. A reader who scrolls away owns that position; their
+    // explicit detachment always wins and stops these requests.
+    if (!running || !intermediateOpen || userDetachedFromLatest.value) return;
+    timelineViewport.value?.scrollToLatest();
+  },
+  { flush: "post" },
+);
 
 watch(
   () => props.threadId,
