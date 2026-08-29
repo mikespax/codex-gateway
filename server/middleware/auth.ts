@@ -1,7 +1,13 @@
 import { defineEventHandler, getRequestURL } from "h3";
 import { authenticateEvent } from "../utils/gateway/auth/context";
 
-const PUBLIC_API_PATHS = new Set(["/api/auth/login", "/api/realtime"]);
+const PUBLIC_API_PATHS = new Set([
+  "/api/auth/login",
+  "/api/realtime",
+  "/api/android/device/revoke",
+  "/api/android/device/reply",
+  "/api/android/device/token",
+]);
 
 export default defineEventHandler((event) => {
   const path = getRequestURL(event).pathname;

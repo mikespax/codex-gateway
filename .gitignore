@@ -30,3 +30,12 @@ test-results
 .data-e2e
 .e2e-runtime
 .data
+
+# Android companion local/build state
+android/.gradle
+android/local.properties
+android/**/build
+android/**/*.jks
+android/**/*.keystore
+android/app/google-services.json
+secrets/firebase-service-account*.json

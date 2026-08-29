@@ -1,4 +1,5 @@
 import { deliverBarkNotification } from "./bark-delivery";
+import { deliverAndroidNotification } from "./android-delivery";
 import { notificationRealtimeEvents } from "./notification-realtime-events";
 import type { ServerNotification } from "~~/shared/types";
 import { gatewayMemoryState } from "../state/memory";
@@ -14,7 +15,10 @@ export const notificationCenter = {
     // Browser fan-out and Bark delivery have separate idempotency state. A duplicate app-server
     // completion must not toast twice, but it may legitimately retry a Bark attempt that exhausted
     // its transient network retries and therefore was never marked delivered.
-    await deliverBarkNotification(notification);
+    await Promise.all([
+      deliverBarkNotification(notification),
+      deliverAndroidNotification(notification),
+    ]);
   },
 };
 

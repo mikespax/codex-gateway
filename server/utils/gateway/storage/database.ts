@@ -124,6 +124,50 @@ function migrate(db: DatabaseSync) {
       notification_sent_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS android_devices (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      fcm_token_hash TEXT NOT NULL,
+      encrypted_fcm_token TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS android_notifications (
+      device_id TEXT NOT NULL REFERENCES android_devices(id) ON DELETE CASCADE,
+      notification_key TEXT NOT NULL,
+      target_kind TEXT NOT NULL CHECK (target_kind IN ('thread', 'tmuxMonitor')),
+      host_id INTEGER NOT NULL,
+      project_id INTEGER,
+      thread_id TEXT,
+      monitor_id INTEGER,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      reply_allowed INTEGER NOT NULL DEFAULT 0,
+      delivery_status TEXT NOT NULL CHECK (delivery_status IN ('pending', 'sent', 'failed')),
+      delivery_error TEXT,
+      created_at TEXT NOT NULL,
+      sent_at TEXT,
+      expires_at TEXT NOT NULL,
+      replied_at TEXT,
+      PRIMARY KEY (device_id, notification_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS android_reply_requests (
+      device_id TEXT NOT NULL REFERENCES android_devices(id) ON DELETE CASCADE,
+      client_message_id TEXT NOT NULL,
+      notification_key TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('processing', 'accepted', 'failed')),
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (device_id, client_message_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_tmux_monitors_host
@@ -131,5 +175,11 @@ function migrate(db: DatabaseSync) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_tmux_monitors_active_location
       ON tmux_monitors(user_id, host_id, session_name, window_index, pane_index)
       WHERE status = 'active';
+    CREATE INDEX IF NOT EXISTS idx_android_devices_user
+      ON android_devices(user_id, is_active, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_android_devices_active_fcm
+      ON android_devices(user_id, fcm_token_hash) WHERE is_active = 1;
+    CREATE INDEX IF NOT EXISTS idx_android_notifications_expiry
+      ON android_notifications(device_id, expires_at);
   `);
 }
