@@ -62,14 +62,14 @@ test("expanded intermediate steps keep file summaries but hide code-change detai
   await expect(page.locator(".diff-markdown")).toHaveCount(0);
 });
 
-test("command labels unwrap official shell invocations and short output uses natural height", async ({
+test("active routine commands and empty reasoning collapse into one working row", async ({
   page,
 }) => {
   await openApp(page);
-  const threadId = "e2e-short-command-output-thread";
+  const threadId = "e2e-compact-live-work-thread";
   await seedGatewayThread(page, {
     threadId,
-    currentThread: { id: threadId, name: "Short Command Output" },
+    currentThread: { id: threadId, name: "Compact Live Work" },
     history: {
       thread: {
         id: threadId,
@@ -79,11 +79,21 @@ test("command labels unwrap official shell invocations and short output uses nat
             status: "running",
             items: [
               {
+                id: "agent-progress-1",
+                type: "agentMessage",
+                text: "I am checking the relevant files now.",
+              },
+              {
                 id: "command-short-1",
                 type: "commandExecution",
                 status: "completed",
                 command: "/bin/zsh -lc 'pwd && printf \"done\"'",
                 aggregatedOutput: "/tmp/e2e\n",
+              },
+              {
+                id: "reasoning-empty-1",
+                type: "reasoning",
+                status: "completed",
               },
               {
                 id: "command-plain-1",
@@ -93,12 +103,15 @@ test("command labels unwrap official shell invocations and short output uses nat
                 aggregatedOutput: "",
               },
               {
-                id: "command-failed-1",
+                id: "command-approval-1",
                 type: "commandExecution",
-                status: "failed",
-                command: "false",
-                aggregatedOutput: "",
-                exitCode: 1,
+                status: "inProgress",
+                command: "deploy production",
+                pendingApproval: {
+                  requestId: "approval-1",
+                  method: "item/commandExecution/requestApproval",
+                  params: { reason: "Production permission is required" },
+                },
               },
             ],
           },
@@ -108,29 +121,14 @@ test("command labels unwrap official shell invocations and short output uses nat
   });
 
   await openIntermediateSteps(page);
-  await expect(page.getByRole("button", { name: /pwd && printf "done"/ })).toBeVisible();
-  const completedCommand = page.getByRole("button", { name: /pwd && printf "done"/ });
-  const runningCommand = page.getByRole("button", { name: /sleep 10/ });
-  const failedCommand = page.getByRole("button", { name: /false/ });
-  await expect(runningCommand).toBeVisible();
-  await expect(failedCommand).toBeVisible();
-  await expect(completedCommand.getByTestId("command-status-completed")).toBeVisible();
-  await expect(runningCommand.getByTestId("command-status-running")).toBeVisible();
-  await expect(failedCommand.getByTestId("command-status-failed")).toBeVisible();
-  await completedCommand.click();
-  const commandOutput = page.getByTestId("chat-scroll-area").getByText("/tmp/e2e");
-  await expect(commandOutput).toBeVisible();
-  await expect
-    .poll(async () =>
-      commandOutput.evaluate((element: HTMLElement) => {
-        const scrollArea = element.closest('[data-slot="scroll-area"]');
-        if (!(scrollArea instanceof HTMLElement)) {
-          throw new Error("Missing command output scroll area");
-        }
-        return scrollArea.getBoundingClientRect().height;
-      }),
-    )
-    .toBeLessThan(96);
+  await expect(page.getByText("I am checking the relevant files now.")).toBeVisible();
+  await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
+  await expect(page.getByTestId("intermediate-working-status")).toContainText(/Working|处理中/);
+  await expect(page.getByRole("button", { name: /pwd && printf "done"/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /sleep 10/ })).toHaveCount(0);
+  await expect(page.getByText(/Thinking|思考中/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /deploy production/ })).toBeVisible();
+  await expect(page.getByText(/Waiting for approval|等待审批/)).toBeVisible();
 });
 
 test("switching threads keeps hidden diff details out of the intermediate summary", async ({

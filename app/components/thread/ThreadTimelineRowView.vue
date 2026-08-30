@@ -3,6 +3,7 @@ import IntermediateStepsToggle from "@/components/thread/IntermediateStepsToggle
 import ThreadItemView from "@/components/thread/ThreadItemView.vue";
 import TurnDurationLabel from "@/components/thread/TurnDurationLabel.vue";
 import type { ThreadTimelineRow } from "@/components/thread/timeline-rows";
+import { Loader } from "@codex-gateway/ai-elements/loader";
 
 const props = defineProps<{
   row: ThreadTimelineRow;
@@ -13,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   intermediateToggle: [turnId: string, open: boolean];
 }>();
+const { t } = useI18n();
 
 // Read the reactive row directly. App-server stream reducers update nested item proxies in place;
 // cloning them into a presentation snapshot hides those deltas from Vue and prevents TanStack's
@@ -39,5 +41,15 @@ const emit = defineEmits<{
     :turn-timing="props.row.turnTiming"
     :agent-actions-available="props.row.agentActionsAvailable"
   />
+  <div
+    v-else-if="props.row.type === 'workingStatus'"
+    data-testid="intermediate-working-status"
+    class="flex max-w-4xl items-center gap-2 py-1 text-[0.9375rem] text-ink-muted"
+    role="status"
+    aria-live="polite"
+  >
+    <Loader class="size-4 shrink-0 text-primary" />
+    <span>{{ t("app.working") }}</span>
+  </div>
   <TurnDurationLabel v-else :timing="props.row" />
 </template>

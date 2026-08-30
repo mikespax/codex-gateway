@@ -424,6 +424,7 @@
     "reasoningDefault": "Default reasoning",
     "loadingModels": "Loading models",
     "running": "Running",
+    "working": "Working…",
     "completedUnviewed": "Completed, needs review",
     "completed": "Completed",
     "failed": "Failed",

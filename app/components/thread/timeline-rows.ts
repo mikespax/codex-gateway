@@ -45,6 +45,11 @@ export type ThreadTimelineRow =
       completedAt: number | null;
       durationMs: number | null;
       active: boolean;
+    }
+  | {
+      key: string;
+      type: "workingStatus";
+      turnId: string;
     };
 
 export interface ThreadTimelineTurnState {
@@ -67,14 +72,15 @@ export function buildThreadTimelineRows(input: {
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
     appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
 
-    if (sections.intermediateItems.length) {
+    const intermediatePresentation = presentIntermediateItems(sections);
+    if (intermediatePresentation.count) {
       rows.push({
         key: `${input.threadId}:turn-${turn.id}:intermediate-header`,
         type: "intermediateHeader",
         turnId: turn.id,
-        count: sections.intermediateItems.length,
+        count: intermediatePresentation.count,
         open: intermediateOpen,
-        preview: intermediatePreview(sections.intermediateItems),
+        preview: intermediatePreview(intermediatePresentation.items),
         promptPreview: sections.turnIsActive ? latestUserPromptPreview(sections.items) : undefined,
       });
       if (intermediateOpen) {
@@ -83,14 +89,21 @@ export function buildThreadTimelineRows(input: {
           input.threadId,
           turn.id,
           "intermediate",
-          sections.intermediateItems,
+          intermediatePresentation.items,
           sections,
         );
+        if (intermediatePresentation.showWorkingStatus) {
+          rows.push({
+            key: `${input.threadId}:turn-${turn.id}:working-status`,
+            type: "workingStatus",
+            turnId: turn.id,
+          });
+        }
         rows.push({
           key: `${input.threadId}:turn-${turn.id}:intermediate-footer`,
           type: "intermediateHeader",
           turnId: turn.id,
-          count: sections.intermediateItems.length,
+          count: intermediatePresentation.count,
           open: true,
           preview: "",
           footer: true,
@@ -141,7 +154,36 @@ export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
     return row.promptPreview !== undefined && row.promptPreview !== "" ? 136 : 72;
   }
   if (row.type === "turnDuration") return 28;
+  if (row.type === "workingStatus") return 36;
   return estimatedItemHeights[row.item.type] ?? 96;
+}
+
+function presentIntermediateItems(sections: ThreadTurnSections) {
+  if (!sections.turnIsActive) {
+    return {
+      items: sections.intermediateItems,
+      count: sections.intermediateItems.length,
+      showWorkingStatus: false,
+    };
+  }
+
+  const items = sections.intermediateItems.filter((item) => !isRoutineLiveActivity(item));
+  const showWorkingStatus = items.length !== sections.intermediateItems.length;
+  return {
+    items,
+    count: items.length + (showWorkingStatus ? 1 : 0),
+    showWorkingStatus,
+  };
+}
+
+function isRoutineLiveActivity(item: ThreadTimelineItem) {
+  if (item.type === "commandExecution") {
+    return item.pendingApproval == null;
+  }
+  if (item.type === "reasoning") {
+    return threadItemText(item).trim() === "";
+  }
+  return false;
 }
 
 function intermediatePreview(items: ThreadTimelineItem[]) {
@@ -249,6 +291,9 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.durationMs === right.durationMs &&
       left.active === right.active
     );
+  }
+  if (left.type === "workingStatus" && right.type === "workingStatus") {
+    return left.turnId === right.turnId;
   }
   return false;
 }
