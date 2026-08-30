@@ -36,7 +36,7 @@ export function streamMultipartUploads(event: H3Event, tempDir: string) {
     const files: ParsedUploadFile[] = [];
     const writes: Promise<void>[] = [];
     let limitError: Error | null = null;
-    let writeError: unknown = null;
+    let writeError: unknown = undefined;
     let settled = false;
 
     const settle = (error?: unknown) => {
