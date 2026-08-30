@@ -77,6 +77,7 @@ test("active routine commands and empty reasoning collapse into one working row"
           {
             id: "turn-short-command",
             status: "running",
+            startedAt: Math.floor(Date.now() / 1000) - 5,
             items: [
               {
                 id: "agent-progress-1",
@@ -124,11 +125,89 @@ test("active routine commands and empty reasoning collapse into one working row"
   await expect(page.getByText("I am checking the relevant files now.")).toBeVisible();
   await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
   await expect(page.getByTestId("intermediate-working-status")).toContainText(/Working|处理中/);
+  await expect(page.getByTestId("intermediate-working-duration")).toContainText(/\d/);
   await expect(page.getByRole("button", { name: /pwd && printf "done"/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /sleep 10/ })).toHaveCount(0);
   await expect(page.getByText(/Thinking|思考中/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /deploy production/ })).toBeVisible();
   await expect(page.getByText(/Waiting for approval|等待审批/)).toBeVisible();
+});
+
+test("multiple steers remain visible between their own intermediate sections", async ({ page }) => {
+  await openApp(page);
+  const threadId = "e2e-steered-intermediate-sections";
+  await seedGatewayThread(page, {
+    threadId,
+    currentThread: { id: threadId, name: "Steered sections" },
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "turn-steered-sections",
+            status: "running",
+            startedAt: Math.floor(Date.now() / 1000) - 65,
+            items: [
+              {
+                id: "user-original",
+                type: "userMessage",
+                content: [{ type: "text", text: "Original request shown first" }],
+              },
+              {
+                id: "agent-progress-original",
+                type: "agentMessage",
+                text: "Progress for the original request",
+              },
+              {
+                id: "steer-one",
+                clientId: "steer-one",
+                type: "userMessage",
+                content: [{ type: "text", text: "First steer remains visible" }],
+              },
+              {
+                id: "command-after-steer-one",
+                type: "commandExecution",
+                status: "completed",
+                command: "routine command after first steer",
+              },
+              {
+                id: "agent-progress-steer-one",
+                type: "agentMessage",
+                text: "Progress after the first steer",
+              },
+              {
+                id: "steer-two",
+                clientId: "steer-two",
+                type: "userMessage",
+                content: [{ type: "text", text: "Second steer remains visible" }],
+              },
+              {
+                id: "collab-after-steer-two",
+                type: "collabAgentToolCall",
+                status: "inProgress",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  await expect(page.getByText("Original request shown first")).toBeVisible();
+  await expect(page.getByText("First steer remains visible")).toBeVisible();
+  await expect(page.getByText("Second steer remains visible")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveCount(3);
+  await expect(page.getByTestId("active-prompt-recall")).toHaveCount(0);
+  await expect(page.getByTestId("intermediate-header-duration")).toContainText(/1m/);
+
+  await page
+    .getByRole("button", { name: /Intermediate steps|中间过程/ })
+    .last()
+    .click();
+  await expect(page.getByText("Progress for the original request")).toBeVisible();
+  await expect(page.getByText("Progress after the first steer")).toBeVisible();
+  await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
+  await expect(page.getByText("routine command after first steer")).toHaveCount(0);
 });
 
 test("switching threads keeps hidden diff details out of the intermediate summary", async ({

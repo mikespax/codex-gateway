@@ -212,25 +212,20 @@ test("recalls the latest request above active intermediate work", async ({ page 
     },
   });
 
-  const recall = page.getByTestId("active-prompt-recall");
-  const recallText = page.getByTestId("active-prompt-recall-text");
-  const intermediateToggle = recall.locator("xpath=following-sibling::button[1]");
-  const intermediatePreview = page.getByTestId("intermediate-steps-preview");
-  await expect(recall).toBeVisible();
-  await expect(recallText).toContainText(latestRequest.slice(0, 80));
-  await expect(recallText).toHaveCSS("-webkit-line-clamp", "2");
+  const userMessage = page.getByText(latestRequest, { exact: true });
+  const intermediateToggle = page.getByRole("button", { name: /Intermediate steps|中间过程/ });
+  await expect(userMessage).toBeVisible();
+  await expect(page.getByTestId("active-prompt-recall")).toHaveCount(0);
   await expect(intermediateToggle).toBeVisible();
-  await expect(intermediatePreview).toContainText("Checking the current production state");
-  await expect(intermediatePreview).toContainText("current production notification layout");
-  await expect(intermediatePreview).toHaveCSS("-webkit-line-clamp", "2");
+  await expect(page.getByTestId("intermediate-steps-working")).toBeVisible();
 
-  const [recallBox, toggleBox] = await Promise.all([
-    recall.boundingBox(),
+  const [messageBox, toggleBox] = await Promise.all([
+    userMessage.boundingBox(),
     intermediateToggle.boundingBox(),
   ]);
-  expect(recallBox).not.toBeNull();
+  expect(messageBox).not.toBeNull();
   expect(toggleBox).not.toBeNull();
-  expect(recallBox!.y + recallBox!.height).toBeLessThanOrEqual(toggleBox!.y);
+  expect(messageBox!.y + messageBox!.height).toBeLessThanOrEqual(toggleBox!.y);
 });
 
 test("shows effort and compact context usage without mobile approval controls", async ({
@@ -443,14 +438,10 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   await expect(page.getByTestId("virtual-intermediate-items")).toHaveCount(0);
   await expect.poll(() => mountedRows.count()).toBeLessThan(30);
 
-  // Use the final row as a stable lifecycle probe. Deep estimated rows can move while WebKit
-  // replaces preceding estimates, which is expected virtualizer behavior rather than a leak.
   const commandTitle = page.getByText("large command lifecycle probe", { exact: true });
-  await expect(commandTitle).toBeVisible();
+  await expect(commandTitle).toHaveCount(0);
   await expect(page.getByText(/lifecycle-probe-output/)).toHaveCount(0);
-  const commandRow = commandTitle.locator("xpath=ancestor::*[@data-index][1]");
-  const commandRowHandle = await commandRow.elementHandle();
-  if (commandRowHandle === null) throw new Error("Expected mounted command row");
+  await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
 
   await expect(page.getByTestId("file-change-summary").first()).toBeVisible();
   // Expanded intermediate steps keep the compact change summaries, but per-file cards and their
@@ -459,8 +450,7 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   const mountedDiffs = page.locator(".diff-markdown .syntax-highlight");
   await expect(mountedDiffs).toHaveCount(0);
 
-  // Move to the opposite end after capturing a real mounted node. This verifies outer timeline
-  // virtualization directly without relying on an estimated offset inside the 500-row document.
+  // Move to the opposite end to verify the compacted active timeline remains virtualized.
   if (testInfo.project.name === "mobile-webkit-core-scroll") {
     await startChatTouchScrollUp(page, 1_000_000_000);
     await endChatTouchScroll(page);
@@ -477,7 +467,6 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   await expect(page.getByText("large command lifecycle probe", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/lifecycle-probe-output/)).toHaveCount(0);
   await expect(mountedDiffs).toHaveCount(0);
-  expect(await commandRowHandle.evaluate((element) => element.isConnected)).toBe(false);
   await expect.poll(() => mountedRows.count()).toBeLessThan(30);
   const resizeObserverErrors = pageErrors.filter((message) =>
     message.includes("ResizeObserver loop"),

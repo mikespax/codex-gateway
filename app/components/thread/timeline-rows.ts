@@ -24,7 +24,10 @@ export type ThreadTimelineRow =
       count: number;
       open: boolean;
       preview: string;
-      promptPreview?: string;
+      segmentNumber?: number;
+      segmentCount?: number;
+      working?: boolean;
+      startedAt?: number | null;
       footer?: boolean;
     }
   | {
@@ -50,6 +53,7 @@ export type ThreadTimelineRow =
       key: string;
       type: "workingStatus";
       turnId: string;
+      startedAt: number | null;
     };
 
 export interface ThreadTimelineTurnState {
@@ -72,16 +76,29 @@ export function buildThreadTimelineRows(input: {
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
     appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
 
-    const intermediatePresentation = presentIntermediateItems(sections);
-    if (intermediatePresentation.count) {
+    const intermediateSegments = splitIntermediateSegments(sections);
+    intermediateSegments.forEach((segment, segmentIndex) => {
+      const isLatestSegment = segmentIndex === intermediateSegments.length - 1;
+      if (segment.promptItem) {
+        appendItemRows(rows, input.threadId, turn.id, "user", [segment.promptItem], sections);
+      }
+      const intermediatePresentation = presentIntermediateItems(
+        segment.items,
+        sections.turnIsActive,
+        isLatestSegment,
+      );
+      const working = sections.turnIsActive && isLatestSegment;
       rows.push({
-        key: `${input.threadId}:turn-${turn.id}:intermediate-header`,
+        key: `${input.threadId}:turn-${turn.id}:intermediate-header-${segmentIndex}`,
         type: "intermediateHeader",
         turnId: turn.id,
         count: intermediatePresentation.count,
         open: intermediateOpen,
         preview: intermediatePreview(intermediatePresentation.items),
-        promptPreview: sections.turnIsActive ? latestUserPromptPreview(sections.items) : undefined,
+        segmentNumber: segmentIndex + 1,
+        segmentCount: intermediateSegments.length,
+        working,
+        startedAt: working ? timing.startedAt : undefined,
       });
       if (intermediateOpen) {
         appendItemRows(
@@ -97,19 +114,22 @@ export function buildThreadTimelineRows(input: {
             key: `${input.threadId}:turn-${turn.id}:working-status`,
             type: "workingStatus",
             turnId: turn.id,
+            startedAt: timing.startedAt,
           });
         }
-        rows.push({
-          key: `${input.threadId}:turn-${turn.id}:intermediate-footer`,
-          type: "intermediateHeader",
-          turnId: turn.id,
-          count: intermediatePresentation.count,
-          open: true,
-          preview: "",
-          footer: true,
-        });
+        if (isLatestSegment) {
+          rows.push({
+            key: `${input.threadId}:turn-${turn.id}:intermediate-footer`,
+            type: "intermediateHeader",
+            turnId: turn.id,
+            count: intermediatePresentation.count,
+            open: true,
+            preview: "",
+            footer: true,
+          });
+        }
       }
-    }
+    });
 
     appendItemRows(
       rows,
@@ -150,25 +170,27 @@ export function reuseUnchangedTimelineRows(
 
 export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   if (row === undefined) return 96;
-  if (row.type === "intermediateHeader") {
-    return row.promptPreview !== undefined && row.promptPreview !== "" ? 136 : 72;
-  }
+  if (row.type === "intermediateHeader") return 72;
   if (row.type === "turnDuration") return 28;
   if (row.type === "workingStatus") return 36;
   return estimatedItemHeights[row.item.type] ?? 96;
 }
 
-function presentIntermediateItems(sections: ThreadTurnSections) {
-  if (!sections.turnIsActive) {
+function presentIntermediateItems(
+  intermediateItems: ThreadTimelineItem[],
+  turnIsActive: boolean,
+  isLatestSegment: boolean,
+) {
+  if (!turnIsActive) {
     return {
-      items: sections.intermediateItems,
-      count: sections.intermediateItems.length,
+      items: intermediateItems,
+      count: intermediateItems.length,
       showWorkingStatus: false,
     };
   }
 
-  const items = sections.intermediateItems.filter((item) => !isRoutineLiveActivity(item));
-  const showWorkingStatus = items.length !== sections.intermediateItems.length;
+  const items = intermediateItems.filter((item) => !isRoutineLiveActivity(item));
+  const showWorkingStatus = isLatestSegment;
   return {
     items,
     count: items.length + (showWorkingStatus ? 1 : 0),
@@ -183,7 +205,44 @@ function isRoutineLiveActivity(item: ThreadTimelineItem) {
   if (item.type === "reasoning") {
     return threadItemText(item).trim() === "";
   }
-  return false;
+  return [
+    "appNotification",
+    "collabAgentToolCall",
+    "contextCompaction",
+    "dynamicToolCall",
+    "enteredReviewMode",
+    "exitedReviewMode",
+    "imageView",
+    "mcpToolCall",
+    "sleep",
+    "subAgentActivity",
+    "webSearch",
+  ].includes(item.type);
+}
+
+function splitIntermediateSegments(sections: ThreadTurnSections) {
+  const segments: Array<{ promptItem?: ThreadTimelineItem; items: ThreadTimelineItem[] }> = [];
+  let current = {
+    promptItem: undefined as ThreadTimelineItem | undefined,
+    items: [] as ThreadTimelineItem[],
+  };
+
+  sections.intermediateItems.forEach((item) => {
+    if (userMessageVariant(item, sections) === "steer") {
+      if (current.items.length || current.promptItem) segments.push(current);
+      current = { promptItem: item, items: [] };
+      return;
+    }
+    current.items.push(item);
+  });
+  if (
+    current.items.length ||
+    current.promptItem ||
+    (sections.turnIsActive && segments.length === 0)
+  ) {
+    segments.push(current);
+  }
+  return segments;
 }
 
 function intermediatePreview(items: ThreadTimelineItem[]) {
@@ -209,14 +268,6 @@ function intermediateItemPreview(item: ThreadTimelineItem) {
   }
   const text = "text" in item && typeof item.text === "string" ? item.text : "";
   return text.replace(/\s+/g, " ").trim() || item.type;
-}
-
-function latestUserPromptPreview(items: ThreadTimelineItem[]) {
-  const userMessage = items.findLast((item) => item.type === "userMessage");
-  if (!userMessage) return undefined;
-  const text = threadItemText(userMessage).replace(/\s+/g, " ").trim();
-  if (!text) return undefined;
-  return text.length > 220 ? `${text.slice(0, 219).trimEnd()}…` : text;
 }
 
 function appendItemRows(
@@ -264,7 +315,10 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.count === right.count &&
       left.open === right.open &&
       left.preview === right.preview &&
-      left.promptPreview === right.promptPreview &&
+      left.segmentNumber === right.segmentNumber &&
+      left.segmentCount === right.segmentCount &&
+      left.working === right.working &&
+      left.startedAt === right.startedAt &&
       left.footer === right.footer &&
       left.turnId === right.turnId
     );
@@ -293,7 +347,7 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
     );
   }
   if (left.type === "workingStatus" && right.type === "workingStatus") {
-    return left.turnId === right.turnId;
+    return left.turnId === right.turnId && left.startedAt === right.startedAt;
   }
   return false;
 }
