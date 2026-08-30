@@ -10,6 +10,24 @@ import {
   seedGatewayThread,
 } from "./helpers/gateway-store";
 
+test("desktop browsers keep in-app notification toasts", async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    driver.publishNotification({
+      key: "e2e-desktop-in-app-notification",
+      title: "Turn finished",
+      body: "Desktop browser notification remains available.",
+      target: { kind: "thread", hostId: 1, projectId: 1, threadId: "desktop-notification" },
+    });
+  });
+
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" }),
+  ).toBeVisible();
+});
+
 test("dynamic tool response submits through the server request responder and surfaces failures", async ({
   page,
 }) => {

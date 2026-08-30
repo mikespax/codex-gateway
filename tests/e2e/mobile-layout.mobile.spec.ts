@@ -228,6 +228,24 @@ test("recalls the latest request above active intermediate work", async ({ page 
   expect(messageBox!.y + messageBox!.height).toBeLessThanOrEqual(toggleBox!.y);
 });
 
+test("native Android delivery replaces mobile browser notification toasts", async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    driver.publishNotification({
+      key: "e2e-mobile-native-notification",
+      title: "Turn finished",
+      body: "This notification should only appear in the native companion app.",
+      target: { kind: "thread", hostId: 1, projectId: 1, threadId: "mobile-notification" },
+    });
+  });
+
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" }),
+  ).toHaveCount(0);
+});
+
 test("shows effort and compact context usage without mobile approval controls", async ({
   page,
 }) => {
