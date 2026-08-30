@@ -77,7 +77,8 @@ const emit = defineEmits<{
   selectEffort: [effort: ReasoningEffort];
 }>();
 
-const uploadInput = ref<HTMLInputElement | null>(null);
+const documentUploadInput = ref<HTMLInputElement | null>(null);
+const mediaUploadInput = ref<HTMLInputElement | null>(null);
 const isDraggingFiles = ref(false);
 const keyboardInset = ref(0);
 let restingVisualViewportHeight = 0;
@@ -118,8 +119,9 @@ onBeforeUnmount(() => {
   visualViewport = null;
 });
 
-function openAttachmentPicker() {
-  uploadInput.value?.click();
+function openAttachmentPicker(kind: "documents" | "media") {
+  if (kind === "documents") documentUploadInput.value?.click();
+  else mediaUploadInput.value?.click();
 }
 
 function dragContainsFiles(event: DragEvent) {
@@ -219,12 +221,21 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           @select="emit('selectSlashCommand', $event)"
         />
         <input
-          ref="uploadInput"
+          ref="documentUploadInput"
           data-testid="attachment-input"
           class="hidden"
           type="file"
           multiple
-          accept="*/*"
+          accept="application/*,text/*,.zip,.7z,.rar,.tar,.gz,.bz2,.xz,.md,.yaml,.yml,.toml,.env,.log,.patch,.diff"
+          @change="emit('attachmentChange', $event)"
+        />
+        <input
+          ref="mediaUploadInput"
+          data-testid="media-attachment-input"
+          class="hidden"
+          type="file"
+          multiple
+          accept="image/*,video/*"
           @change="emit('attachmentChange', $event)"
         />
         <AttachmentChips :files="attachedFiles" @remove="emit('removeAttachment', $event)" />

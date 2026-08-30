@@ -326,8 +326,21 @@ test("shows effort and compact context usage without mobile approval controls", 
 
   const attachmentInput = page.getByTestId("attachment-input");
   await expect(page.getByTestId("attachment-button")).toBeVisible();
-  await expect(attachmentInput).toHaveAttribute("accept", "*/*");
-  await attachmentInput.setInputFiles({
+  await page.getByTestId("attachment-button").click();
+  await expect(page.getByTestId("attach-documents-option")).toBeVisible();
+  await expect(page.getByTestId("attach-media-option")).toBeVisible();
+  const documentChooser = page.waitForEvent("filechooser");
+  await page.getByTestId("attach-documents-option").click();
+  expect((await documentChooser).isMultiple()).toBe(true);
+
+  await page.getByTestId("attachment-button").click();
+  await expect(page.getByTestId("attach-media-option")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const mediaAttachmentInput = page.getByTestId("media-attachment-input");
+  await expect(attachmentInput).toHaveAttribute("accept", /application\/\*/);
+  await expect(mediaAttachmentInput).toHaveAttribute("accept", "image/*,video/*");
+  await mediaAttachmentInput.setInputFiles({
     name: "mobile-preview.png",
     mimeType: "image/png",
     buffer: Buffer.from(

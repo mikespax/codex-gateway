@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { CheckIcon, Loader2Icon, PaperclipIcon, SendIcon, SquareIcon } from "@lucide/vue";
+import {
+  CheckIcon,
+  FileArchiveIcon,
+  ImagePlusIcon,
+  Loader2Icon,
+  PaperclipIcon,
+  SendIcon,
+  SquareIcon,
+} from "@lucide/vue";
 import type {
   ApprovalPolicy,
   ModelRecord,
@@ -8,6 +16,12 @@ import type {
   ThreadTokenUsageState,
 } from "~~/shared/types";
 import { Button } from "@codex-gateway/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@codex-gateway/ui/dropdown-menu";
 import ApprovalPolicyPicker from "@/components/chat/composer/ApprovalPolicyPicker.vue";
 import ContextUsageMeter from "@/components/chat/composer/ContextUsageMeter.vue";
 import ModelEffortPicker from "@/components/chat/composer/ModelEffortPicker.vue";
@@ -36,7 +50,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  attach: [];
+  attach: [kind: "documents" | "media"];
   primaryAction: [];
   selectModel: [model: string];
   selectEffort: [effort: ReasoningEffort];
@@ -47,21 +61,47 @@ const emit = defineEmits<{
 <template>
   <div class="flex min-w-0 items-center gap-1.5 pt-1.5 sm:flex-wrap sm:justify-between sm:gap-2">
     <div class="flex min-w-0 items-center gap-1 text-base text-ink-muted">
-      <Button
-        data-testid="attachment-button"
-        type="button"
-        variant="ghost"
-        size="lg"
-        class="h-9 gap-1.5 px-2.5 text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary sm:size-8 sm:px-0"
-        :disabled="uploadingAttachments || !selectedThreadId"
-        :aria-label="$t('app.attachFile')"
-        :title="$t('app.attachFile')"
-        @click="emit('attach')"
-      >
-        <Loader2Icon v-if="uploadingAttachments" class="size-5 animate-spin" />
-        <PaperclipIcon v-else class="size-4" />
-        <span class="sm:hidden">{{ $t("app.attachFilesShort") }}</span>
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button
+            data-testid="attachment-button"
+            type="button"
+            variant="ghost"
+            size="lg"
+            class="h-9 gap-1.5 px-2.5 text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary sm:size-8 sm:px-0"
+            :disabled="uploadingAttachments || !selectedThreadId"
+            :aria-label="$t('app.attachFile')"
+            :title="$t('app.attachFile')"
+          >
+            <Loader2Icon v-if="uploadingAttachments" class="size-5 animate-spin" />
+            <PaperclipIcon v-else class="size-4" />
+            <span class="sm:hidden">{{ $t("app.attachFilesShort") }}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent class="w-56" align="start" side="top">
+          <DropdownMenuItem
+            data-testid="attach-documents-option"
+            @select="emit('attach', 'documents')"
+          >
+            <FileArchiveIcon class="size-4" />
+            <span class="flex min-w-0 flex-col">
+              <span>{{ $t("app.attachDocuments") }}</span>
+              <span class="text-[0.625rem] text-muted-foreground">{{
+                $t("app.attachDocumentsHint")
+              }}</span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem data-testid="attach-media-option" @select="emit('attach', 'media')">
+            <ImagePlusIcon class="size-4" />
+            <span class="flex min-w-0 flex-col">
+              <span>{{ $t("app.attachMedia") }}</span>
+              <span class="text-[0.625rem] text-muted-foreground">{{
+                $t("app.attachMediaHint")
+              }}</span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <div class="hidden sm:block">
         <ApprovalPolicyPicker
           :model-value="selectedApprovalMode"
