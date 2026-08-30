@@ -717,6 +717,7 @@
     "approve": "Approve",
     "decline": "Decline",
     "filesChanged": "{count} files changed",
+    "filesChangedAcrossSteps": "{files} files changed across {steps} steps",
     "fileAdded": "Added",
     "fileDeleted": "Deleted",
     "fileMoved": "Moved",

@@ -5,6 +5,25 @@ import type { ThreadHistoryState } from "../../shared/types";
 import type { ThreadViewState } from "../../app/stores/gateway/types";
 import { projectThreadTimelineHistory } from "../../shared/thread-history/timeline";
 import { gatewayThreadFixture } from "./fixtures/gateway-thread";
+import { compactCompletedFileChangeRuns } from "../../app/components/thread/completed-file-change-runs";
+
+test("compacts consecutive completed file-change steps into one summary", () => {
+  const items = [3, 1, 2, 2, 1, 1].map((count, index) => ({
+    id: `file-change-${index}`,
+    type: "fileChange" as const,
+    status: "completed",
+    changes: Array.from({ length: count }, (_, changeIndex) => ({
+      path: `/tmp/file-${index}-${changeIndex}.txt`,
+      kind: "update",
+    })),
+  }));
+
+  const compacted = compactCompletedFileChangeRuns(items);
+  expect(compacted).toHaveLength(1);
+  expect(compacted[0]?.type).toBe("fileChange");
+  expect(compacted[0]?.changes).toHaveLength(10);
+  expect(compacted[0]?.aggregatedStepCount).toBe(6);
+});
 
 test("expanded intermediate steps keep file summaries but hide code-change details", async ({
   page,

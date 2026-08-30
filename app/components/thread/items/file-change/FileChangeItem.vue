@@ -28,6 +28,10 @@ const itemStatus = computed(() =>
   typeof props.item.status === "string" ? props.item.status : props.item.status?.type,
 );
 const pendingApproval = computed(() => props.item.pendingApproval || null);
+const aggregatedStepCount = computed(() => {
+  const value = props.item.aggregatedStepCount;
+  return typeof value === "number" && Number.isInteger(value) && value > 1 ? value : 1;
+});
 const isInProgress = computed(() => {
   const value = itemStatus.value;
   return value === "inProgress" || value === "running" || value === "active";
@@ -35,6 +39,12 @@ const isInProgress = computed(() => {
 const title = computed(() => {
   if (isInProgress.value && !fileChanges.value.length) {
     return t("app.editingFiles");
+  }
+  if (aggregatedStepCount.value > 1) {
+    return t("app.filesChangedAcrossSteps", {
+      files: fileChanges.value.length,
+      steps: aggregatedStepCount.value,
+    });
   }
   return t("app.filesChanged", { count: fileChanges.value.length });
 });

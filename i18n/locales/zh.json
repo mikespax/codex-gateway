@@ -717,6 +717,7 @@
     "approve": "允许",
     "decline": "拒绝",
     "filesChanged": "{count} 个文件已修改",
+    "filesChangedAcrossSteps": "{steps} 个步骤共修改 {files} 个文件",
     "fileAdded": "新增",
     "fileDeleted": "删除",
     "fileMoved": "移动",

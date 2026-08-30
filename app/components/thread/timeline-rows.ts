@@ -3,6 +3,7 @@ import type { DisplayedTurnTiming } from "@/utils/turn-timing";
 import { threadItemText } from "@/utils/thread-items";
 import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
 import { commandDisplayLabel } from "@/utils/thread-item-display";
+import { compactCompletedFileChangeRuns } from "./completed-file-change-runs";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
 
@@ -182,14 +183,17 @@ function presentIntermediateItems(
   isLatestSegment: boolean,
 ) {
   if (!turnIsActive) {
+    const items = compactCompletedFileChangeRuns(intermediateItems);
     return {
-      items: intermediateItems,
-      count: intermediateItems.length,
+      items,
+      count: items.length,
       showWorkingStatus: false,
     };
   }
 
-  const items = intermediateItems.filter((item) => !isRoutineLiveActivity(item));
+  const items = compactCompletedFileChangeRuns(
+    intermediateItems.filter((item) => !isRoutineLiveActivity(item)),
+  );
   const showWorkingStatus = isLatestSegment;
   return {
     items,
