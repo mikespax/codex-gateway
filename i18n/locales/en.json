@@ -391,6 +391,7 @@
     "projectRequiredForFileReferences": "Select a project before sending a message",
     "custom": "Custom",
     "attachFile": "Attach files or images",
+    "attachFilesShort": "Files",
     "removeAttachment": "Remove attachment",
     "attachedFileReferences": "Attached files, remote paths:",
     "model": "Model",

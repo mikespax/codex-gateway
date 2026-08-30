@@ -325,6 +325,7 @@ test("shows effort and compact context usage without mobile approval controls", 
   await expect(modelSearch).toBeHidden();
 
   const attachmentInput = page.getByTestId("attachment-input");
+  await expect(page.getByTestId("attachment-button")).toBeVisible();
   await expect(attachmentInput).toHaveAttribute("accept", "*/*");
   await attachmentInput.setInputFiles({
     name: "mobile-preview.png",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckIcon, Loader2Icon, PlusIcon, SendIcon, SquareIcon } from "@lucide/vue";
+import { CheckIcon, Loader2Icon, PaperclipIcon, SendIcon, SquareIcon } from "@lucide/vue";
 import type {
   ApprovalPolicy,
   ModelRecord,
@@ -48,16 +48,19 @@ const emit = defineEmits<{
   <div class="flex min-w-0 items-center gap-1.5 pt-1.5 sm:flex-wrap sm:justify-between sm:gap-2">
     <div class="flex min-w-0 items-center gap-1 text-base text-ink-muted">
       <Button
+        data-testid="attachment-button"
         type="button"
         variant="ghost"
-        size="icon-lg"
-        class="text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary"
+        size="lg"
+        class="h-9 gap-1.5 px-2.5 text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary sm:size-8 sm:px-0"
         :disabled="uploadingAttachments || !selectedThreadId"
         :aria-label="$t('app.attachFile')"
+        :title="$t('app.attachFile')"
         @click="emit('attach')"
       >
         <Loader2Icon v-if="uploadingAttachments" class="size-5 animate-spin" />
-        <PlusIcon v-else class="size-5" />
+        <PaperclipIcon v-else class="size-4" />
+        <span class="sm:hidden">{{ $t("app.attachFilesShort") }}</span>
       </Button>
       <div class="hidden sm:block">
         <ApprovalPolicyPicker
