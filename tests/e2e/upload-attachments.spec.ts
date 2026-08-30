@@ -3,6 +3,8 @@ import { z } from "zod";
 import { expect, test } from "./fixtures/remote-workspace";
 import { openApp } from "./helpers/app";
 import { execRemoteSsh } from "./helpers/remote-codex";
+import { remoteTurnFileInputs } from "../../app/composables/composer/attachment-turn-input";
+import { realtimeClientMessageSchema } from "../../shared/runtime/realtime/client-message-schema";
 
 const uploadedFilesSchema = z.object({
   files: z.array(
@@ -14,6 +16,60 @@ const uploadedFilesSchema = z.object({
       isImage: z.boolean(),
     }),
   ),
+});
+
+test("strips local attachment metadata before validating a turn payload", () => {
+  const files = remoteTurnFileInputs([
+    {
+      id: "composer-only-id",
+      name: "review.zip",
+      path: "/tmp/codex-gateway-uploads/upload.test/review.zip",
+      mimeType: "application/zip",
+      size: 4,
+      isImage: false,
+    },
+    {
+      id: "second-composer-only-id",
+      name: "instructions.md",
+      path: "/tmp/codex-gateway-uploads/upload.test/instructions.md",
+      mimeType: "text/markdown",
+      size: 12,
+      isImage: false,
+    },
+  ]);
+
+  expect(files).toEqual([
+    {
+      name: "review.zip",
+      path: "/tmp/codex-gateway-uploads/upload.test/review.zip",
+      mimeType: "application/zip",
+      size: 4,
+      isImage: false,
+    },
+    {
+      name: "instructions.md",
+      path: "/tmp/codex-gateway-uploads/upload.test/instructions.md",
+      mimeType: "text/markdown",
+      size: 12,
+      isImage: false,
+    },
+  ]);
+  expect(
+    realtimeClientMessageSchema.safeParse({
+      type: "turn.start",
+      requestId: "payload-validation-request",
+      hostId: 1,
+      threadId: "payload-validation-thread",
+      projectId: 1,
+      text: "Review the attached archive",
+      clientUserMessageId: "turn-payload-validation",
+      cwd: "/tmp/project",
+      model: null,
+      effort: null,
+      approvalPolicy: null,
+      files,
+    }).success,
+  ).toBe(true);
 });
 
 test("uploads a ZIP attachment to the selected remote host", async ({ page, remoteWorkspace }) => {
