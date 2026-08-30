@@ -1,13 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { openApp } from "./helpers/app";
-import { appendFileDiffLines, seedGatewayThread } from "./helpers/gateway-store";
-import { diffScrollLeft, setDiffScrollLeft } from "./helpers/scroll";
+import { seedGatewayThread } from "./helpers/gateway-store";
 import type { ThreadHistoryState } from "../../shared/types";
 import type { ThreadViewState } from "../../app/stores/gateway/types";
 import { projectThreadTimelineHistory } from "../../shared/thread-history/timeline";
 import { gatewayThreadFixture } from "./fixtures/gateway-thread";
 
-test("file diff blocks can collapse and expand after virtual timeline measurement", async ({
+test("expanded intermediate steps keep file summaries but hide code-change details", async ({
   page,
 }) => {
   await openApp(page);
@@ -57,32 +56,10 @@ test("file diff blocks can collapse and expand after virtual timeline measuremen
   });
 
   await openIntermediateSteps(page);
-  const toggle = page.getByRole("button", { name: /src\/example\.py/ });
-  const diffText = page.getByText("new_value =");
-  await expect(toggle.locator("span[title]")).toHaveAttribute("title", changedFilePath);
-  await expect(toggle).toHaveAttribute("data-state", "open");
-  await expect(diffText).toBeVisible();
-  await expect
-    .poll(async () => (await page.locator(".diff-markdown").first().boundingBox())?.height ?? 0)
-    .toBeGreaterThan(24);
-
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("data-state", "closed");
-  await expect(diffText).toBeHidden();
-
-  await appendFileDiffLines(page, {
-    itemId: "file-change-1",
-    path: changedFilePath,
-    prefix: "streamed while manually collapsed",
-    count: 2,
-  });
-  await expect(toggle).toHaveAttribute("data-state", "closed");
-  await expect(page.getByText("streamed while manually collapsed 001")).toHaveCount(0);
-
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("data-state", "open");
-  await expect(diffText).toBeVisible();
-  await expect(page.getByText("streamed while manually collapsed 001")).toBeVisible();
+  await expect(page.getByTestId("file-change-summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: /src\/example\.py/ })).toHaveCount(0);
+  await expect(page.getByText("new_value =")).toHaveCount(0);
+  await expect(page.locator(".diff-markdown")).toHaveCount(0);
 });
 
 test("command labels unwrap official shell invocations and short output uses natural height", async ({
@@ -156,69 +133,7 @@ test("command labels unwrap official shell invocations and short output uses nat
     .toBeLessThan(96);
 });
 
-test("streaming diff keeps user-selected horizontal scroll position", async ({ page }) => {
-  await openApp(page);
-  const threadId = "e2e-diff-horizontal-scroll-thread";
-  const longValue = "x".repeat(220);
-  const diff = [
-    "diff --git a/src/wide.py b/src/wide.py",
-    "index 1111111..2222222 100644",
-    "--- a/src/wide.py",
-    "+++ b/src/wide.py",
-    "@@ -1,20 +1,20 @@",
-    ...Array.from(
-      { length: 36 },
-      (_, index) => `+wide_line_${String(index + 1).padStart(3, "0")} = '${longValue}'`,
-    ),
-  ].join("\n");
-
-  await seedGatewayThread(page, {
-    threadId,
-    projectId: 1,
-    currentThread: { id: threadId, name: "Diff Horizontal Scroll" },
-    history: {
-      thread: {
-        id: threadId,
-        turns: [
-          {
-            id: "turn-diff-horizontal",
-            status: "running",
-            items: [
-              {
-                id: "file-wide-1",
-                type: "fileChange",
-                status: "running",
-                changes: [{ path: "src/wide.py", kind: "update", diff }],
-              },
-            ],
-          },
-        ],
-      },
-    },
-  });
-
-  await openIntermediateSteps(page);
-  await expect(page.getByRole("button", { name: /src\/wide\.py/ })).toHaveAttribute(
-    "data-state",
-    "open",
-  );
-  await expect(page.getByText("wide_line_001")).toBeVisible();
-  const chosenScrollLeft = await setDiffScrollLeft(page, "src/wide.py", 96);
-  expect(chosenScrollLeft).toBeGreaterThan(0);
-
-  await appendFileDiffLines(page, {
-    itemId: "file-wide-1",
-    path: "src/wide.py",
-    prefix: `streamed wide diff line ${longValue}`,
-    count: 24,
-  });
-
-  await page.waitForTimeout(300);
-  await expect.poll(() => diffScrollLeft(page, "src/wide.py")).toBeGreaterThanOrEqual(94);
-  await expect.poll(() => diffScrollLeft(page, "src/wide.py")).toBeLessThanOrEqual(98);
-});
-
-test("switching threads keeps asynchronously rendered diff content in normal flow", async ({
+test("switching threads keeps hidden diff details out of the intermediate summary", async ({
   page,
 }) => {
   await openApp(page);
@@ -299,13 +214,10 @@ test("switching threads keeps asynchronously rendered diff content in normal flo
   await page.getByTestId(`thread-button-${shortThreadId}`).click();
   await expect(page.getByText("short thread content")).toBeVisible();
   await page.getByTestId(`thread-button-${diffThreadId}`).click();
-  await expect(page.getByRole("button", { name: /src\/async\.py/ })).toHaveAttribute(
-    "data-state",
-    "open",
-  );
-  await expect(page.getByText("async_diff_line_120")).toBeVisible();
+  await expect(page.getByTestId("file-change-summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: /src\/async\.py/ })).toHaveCount(0);
+  await expect(page.getByText("async_diff_line_120")).toHaveCount(0);
   await expect(page.getByText(finalMarker)).toBeVisible();
-  await expect.poll(() => diffEndsBeforeText(page, finalMarker)).toBe(true);
 });
 
 function cachedThreadView(threadId: string, history: ThreadHistoryState): ThreadViewState {
@@ -325,12 +237,6 @@ function cachedThreadView(threadId: string, history: ThreadHistoryState): Thread
     loading: false,
     error: null,
   };
-}
-
-async function diffEndsBeforeText(page: import("@playwright/test").Page, text: string) {
-  const diffBox = await page.locator(".diff-markdown").first().boundingBox();
-  const textBox = await page.getByText(text).boundingBox();
-  return Boolean(diffBox && textBox && diffBox.y + diffBox.height <= textBox.y + 1);
 }
 
 async function openIntermediateSteps(page: import("@playwright/test").Page) {

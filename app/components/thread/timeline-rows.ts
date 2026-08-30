@@ -10,7 +10,7 @@ type ThreadTimelineItemSection = "user" | "intermediate" | "final";
 
 const estimatedItemHeights: Partial<Record<ThreadTimelineItem["type"], number>> = {
   commandExecution: 48,
-  fileChange: 440,
+  fileChange: 48,
   agentMessage: 144,
   reasoning: 128,
   userMessage: 160,

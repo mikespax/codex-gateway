@@ -16,6 +16,7 @@ const props = defineProps<{
   item: ThreadHistoryItem;
   hostId: number | null;
   threadId: string | null;
+  hideDetails?: boolean;
 }>();
 const { t } = useI18n();
 const filePreviewContext = useFilePreviewContext();
@@ -89,7 +90,7 @@ watch(
 
 <template>
   <div class="max-w-4xl text-ink-secondary">
-    <div class="flex items-center gap-2 text-[0.9375rem]">
+    <div data-testid="file-change-summary" class="flex items-center gap-2 text-[0.9375rem]">
       <Loader2Icon v-if="isInProgress" class="size-4 animate-spin text-primary" />
       <FilePenIcon v-else class="size-4" />
       <span>{{ title }}</span>
@@ -105,7 +106,7 @@ watch(
         :presentation-id="`file-${String(item.id ?? item.turnId ?? 'request')}`"
       />
     </div>
-    <div v-if="fileChanges.length" class="mt-3 space-y-2">
+    <div v-if="!hideDetails && fileChanges.length" class="mt-3 space-y-2">
       <FileChangeOutputPanel v-if="output" :output="output" :streaming="isInProgress" />
       <Collapsible
         v-for="change in fileChanges"
@@ -136,13 +137,13 @@ watch(
       </Collapsible>
     </div>
     <FileChangeOutputPanel
-      v-else-if="output"
+      v-else-if="!hideDetails && output"
       :output="output"
       :streaming="isInProgress"
       extra-class="mt-3"
     />
     <div
-      v-else-if="isInProgress"
+      v-else-if="!hideDetails && isInProgress"
       class="mt-3 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink-muted"
     >
       {{ t("app.waitingFileChanges") }}

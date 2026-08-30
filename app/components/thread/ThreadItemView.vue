@@ -6,6 +6,7 @@ import type { DisplayedTurnTiming } from "@/utils/turn-timing";
 
 const props = defineProps<{
   item: ThreadTimelineItem;
+  section?: "user" | "intermediate" | "final";
   hostId: number | null;
   threadId: string | null;
   userMessageVariant?: "normal" | "steer";
@@ -14,11 +15,15 @@ const props = defineProps<{
 }>();
 
 const itemComponent = computed(() => componentForThreadItem(props.item.type));
+const itemPresentationProps = computed(() =>
+  props.section === "intermediate" && props.item.type === "fileChange" ? { hideDetails: true } : {},
+);
 </script>
 
 <template>
   <component
     :is="itemComponent"
+    v-bind="itemPresentationProps"
     :item="item"
     :host-id="hostId"
     :thread-id="threadId"

@@ -32,6 +32,7 @@ const emit = defineEmits<{
   <ThreadItemView
     v-else-if="props.row.type === 'item'"
     :item="props.row.item"
+    :section="props.row.section"
     :host-id="hostId"
     :thread-id="threadId"
     :user-message-variant="props.row.userMessageVariant"

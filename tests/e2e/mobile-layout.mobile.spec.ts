@@ -452,13 +452,12 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   const commandRowHandle = await commandRow.elementHandle();
   if (commandRowHandle === null) throw new Error("Expected mounted command row");
 
-  const fileChange = page.getByRole("button", { name: /src\/large_file_/ }).first();
-  await expect(fileChange).toBeVisible();
-  // Visible file cards start expanded, but outer timeline virtualization must limit expensive
-  // highlighters to the viewport neighborhood instead of mounting all 91 file changes.
+  await expect(page.getByTestId("file-change-summary").first()).toBeVisible();
+  // Expanded intermediate steps keep the compact change summaries, but per-file cards and their
+  // expensive syntax highlighters stay unmounted.
+  await expect(page.getByRole("button", { name: /src\/large_file_/ })).toHaveCount(0);
   const mountedDiffs = page.locator(".diff-markdown .syntax-highlight");
-  await expect.poll(() => mountedDiffs.count()).toBeGreaterThan(0);
-  await expect.poll(() => mountedDiffs.count()).toBeLessThan(30);
+  await expect(mountedDiffs).toHaveCount(0);
 
   // Move to the opposite end after capturing a real mounted node. This verifies outer timeline
   // virtualization directly without relying on an estimated offset inside the 500-row document.
