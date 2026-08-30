@@ -17,7 +17,7 @@ const imageInput = z
     detail: z.enum(["low", "high", "auto", "original"]).optional(),
   })
   .strict();
-const fileInput = z
+const strictFileInput = z
   .object({
     path: z.string(),
     name: z.string(),
@@ -26,6 +26,14 @@ const fileInput = z
     isImage: z.boolean(),
   })
   .strict();
+const fileInput = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+
+  // Compatibility for browser tabs opened before composer attachment payloads were projected to
+  // wire-only fields. Keep the trust boundary strict for every other unknown property.
+  const { id: _legacyComposerId, ...wireValue } = value as Record<string, unknown>;
+  return wireValue;
+}, strictFileInput);
 const collaborationMode = z
   .object({
     mode: z.enum(["default", "plan"]),

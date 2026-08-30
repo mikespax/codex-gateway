@@ -72,6 +72,52 @@ test("strips local attachment metadata before validating a turn payload", () => 
   ).toBe(true);
 });
 
+test("accepts an attachment from an already-open legacy browser tab without retaining its id", () => {
+  const parsed = realtimeClientMessageSchema.parse({
+    type: "turn.start",
+    requestId: "legacy-payload-validation-request",
+    hostId: 1,
+    threadId: "legacy-payload-validation-thread",
+    projectId: 1,
+    text: "Review the attached archive",
+    clientUserMessageId: "legacy-turn-payload-validation",
+    cwd: "/tmp/project",
+    model: null,
+    effort: null,
+    approvalPolicy: null,
+    files: [
+      {
+        id: "legacy-composer-only-id",
+        name: "review.zip",
+        path: "/tmp/codex-gateway-uploads/upload.test/review.zip",
+        mimeType: "application/zip",
+        size: 4,
+        isImage: false,
+      },
+    ],
+  });
+
+  expect(parsed.type).toBe("turn.start");
+  if (parsed.type !== "turn.start") throw new Error("Expected turn.start payload");
+  const parsedFile = parsed.files?.[0];
+  expect(parsed.files).toEqual([
+    {
+      name: "review.zip",
+      path: "/tmp/codex-gateway-uploads/upload.test/review.zip",
+      mimeType: "application/zip",
+      size: 4,
+      isImage: false,
+    },
+  ]);
+  if (parsedFile === undefined) throw new Error("Expected a parsed attachment");
+
+  const unknownField = realtimeClientMessageSchema.safeParse({
+    ...parsed,
+    files: [{ ...parsedFile, unexpected: true }],
+  });
+  expect(unknownField.success).toBe(false);
+});
+
 test("uploads a ZIP attachment to the selected remote host", async ({ page, remoteWorkspace }) => {
   await openApp(page);
   const { host } = await remoteWorkspace.provision({
