@@ -7,7 +7,8 @@ import { createError, type H3Event } from "h3";
 import ensureError from "ensure-error";
 
 const MAX_UPLOAD_FILES = 8;
-const MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024;
+// Support common project archives while keeping each streamed request bounded.
+const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024;
 
 export interface ParsedUploadFile {
   originalName: string;

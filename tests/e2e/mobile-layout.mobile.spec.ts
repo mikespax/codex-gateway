@@ -324,7 +324,9 @@ test("shows effort and compact context usage without mobile approval controls", 
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 4, y: 4 } });
   await expect(modelSearch).toBeHidden();
 
-  await page.locator('input[type="file"]').setInputFiles({
+  const attachmentInput = page.getByTestId("attachment-input");
+  await expect(attachmentInput).toHaveAttribute("accept", "*/*");
+  await attachmentInput.setInputFiles({
     name: "mobile-preview.png",
     mimeType: "image/png",
     buffer: Buffer.from(
@@ -335,6 +337,33 @@ test("shows effort and compact context usage without mobile approval controls", 
   await expect(page.getByAltText("mobile-preview.png")).toBeVisible();
   await page.getByRole("button", { name: "移除附件" }).click();
   await expect(page.getByAltText("mobile-preview.png")).toHaveCount(0);
+
+  let uploadCount = 0;
+  await page.route("**/api/uploads?*", async (route) => {
+    uploadCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        files: [
+          {
+            name: "mobile-assets.zip",
+            path: "/tmp/codex-gateway-uploads/upload.test/mobile-assets.zip",
+            mimeType: "application/zip",
+            size: 24,
+            isImage: false,
+          },
+        ],
+      }),
+    });
+  });
+  await attachmentInput.setInputFiles({
+    name: "mobile-assets.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  });
+  await expect(page.getByTestId("composer-surface")).toContainText("mobile-assets.zip");
+  expect(uploadCount).toBe(1);
 });
 
 test("gives the Goal objective most of the mobile details dialog", async ({ page }) => {

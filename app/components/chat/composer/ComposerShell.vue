@@ -220,9 +220,11 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         />
         <input
           ref="uploadInput"
+          data-testid="attachment-input"
           class="hidden"
           type="file"
           multiple
+          accept="*/*"
           @change="emit('attachmentChange', $event)"
         />
         <AttachmentChips :files="attachedFiles" @remove="emit('removeAttachment', $event)" />
