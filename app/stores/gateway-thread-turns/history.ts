@@ -19,14 +19,14 @@ import {
 import { pinnedKey } from "@/stores/gateway/thread-utils/identity";
 
 export function insertOptimisticSteerMessage(
+  hostId: number,
   threadId: string,
   turnId: string,
   clientUserMessageId: string,
   content: unknown[],
 ) {
-  const views = useGatewayThreadViewStore();
-  setSelectedThreadHistory(
-    insertSteerItemIntoActiveTurn(views.history, views.currentThread, threadId, turnId, {
+  updateThreadHistory(hostId, threadId, (history, currentThread) =>
+    insertSteerItemIntoActiveTurn(history, currentThread, threadId, turnId, {
       type: "userMessage",
       id: clientUserMessageId,
       clientId: clientUserMessageId,
@@ -34,43 +34,63 @@ export function insertOptimisticSteerMessage(
       content,
     }),
   );
-  cacheSelectedThreadView();
 }
 
 export function insertOptimisticNewTurnMessage(
+  hostId: number,
   threadId: string,
   clientUserMessageId: string,
   content: unknown[],
 ) {
-  const views = useGatewayThreadViewStore();
-  setSelectedThreadHistory(
-    mergeItemIntoLatestTurn(views.history, views.currentThread, threadId, {
+  updateThreadHistory(hostId, threadId, (history, currentThread) =>
+    mergeItemIntoLatestTurn(history, currentThread, threadId, {
       type: "userMessage",
       id: clientUserMessageId,
       clientId: clientUserMessageId,
       content,
     }),
   );
-  cacheSelectedThreadView();
 }
 
-export function mergeStartedTurn(threadId: string, turn: ThreadHistoryTurn) {
-  const views = useGatewayThreadViewStore();
-  setSelectedThreadHistory(
-    mergeThreadTurns(views.history, views.currentThread, threadId, [turn], "append"),
+export function mergeStartedTurn(hostId: number, threadId: string, turn: ThreadHistoryTurn) {
+  updateThreadHistory(hostId, threadId, (history, currentThread) =>
+    mergeThreadTurns(history, currentThread, threadId, [turn], "append"),
   );
-  cacheSelectedThreadView();
 }
 
-export function mergeTurnItems(threadId: string, turn: ThreadHistoryTurn) {
-  const views = useGatewayThreadViewStore();
-  for (const item of turn.items ?? []) {
-    setSelectedThreadHistory(
-      mergeItemIntoLatestTurn(views.history, views.currentThread, threadId, {
+export function mergeTurnItems(hostId: number, threadId: string, turn: ThreadHistoryTurn) {
+  updateThreadHistory(hostId, threadId, (history, currentThread) => {
+    let nextHistory = history;
+    for (const item of turn.items ?? []) {
+      nextHistory = mergeItemIntoLatestTurn(nextHistory, currentThread, threadId, {
         ...item,
         turnId: turn.id,
-      }),
-    );
+      });
+    }
+    return nextHistory;
+  });
+}
+
+function updateThreadHistory(
+  hostId: number,
+  threadId: string,
+  update: (
+    history: ThreadHistoryState | null,
+    currentThread: ThreadHistorySeed | null,
+  ) => ThreadHistoryState | null,
+) {
+  const navigation = useGatewayNavigationStore();
+  const views = useGatewayThreadViewStore();
+  if (navigation.selectedHostId === hostId && navigation.selectedThreadId === threadId) {
+    setSelectedThreadHistory(update(views.history, views.currentThread));
+    cacheSelectedThreadView();
+    return;
+  }
+  const view = views.threadViews[pinnedKey(hostId, threadId)];
+  if (view !== undefined) {
+    patchThreadView(hostId, threadId, {
+      history: update(view.history, view.currentThread),
+    });
   }
 }
 

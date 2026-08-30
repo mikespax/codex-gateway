@@ -12,6 +12,11 @@ import {
 import { defaultGatewayProject } from "./fixtures/thread-history";
 import { gatewayThreadFixture } from "./fixtures/gateway-thread";
 import { appServerTurnFixture } from "./fixtures/app-server-turn";
+import {
+  deferredRealtimeTurnStartRequests,
+  installDeferredRealtimeTurnStartRoute,
+  releaseDeferredRealtimeTurnStartRoute,
+} from "./helpers/realtime-route";
 import { z } from "zod";
 
 const storedRouteSelectionSchema = z.object({
@@ -282,6 +287,108 @@ test("switching to cached thread history renders without waiting for the next ev
       .getByTestId("chat-scroll-area")
       .getByText("second cached thread should be visible immediately"),
   ).toBeVisible();
+});
+
+test("accepted send stays with its original thread after immediate navigation", async ({
+  page,
+}) => {
+  await openApp(page);
+  const originalThreadId = "e2e-send-before-switch-original";
+  const nextThreadId = "e2e-send-before-switch-next";
+  const acceptedTurnId = "turn-send-before-switch";
+  installDeferredRealtimeTurnStartRoute(
+    page,
+    appServerTurnFixture({ id: acceptedTurnId, status: "inProgress", items: [] }),
+  );
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId: originalThreadId,
+    currentThread: { id: originalThreadId, name: "Original send target" },
+    history: { thread: { id: originalThreadId, turns: [] } },
+    status: "idle",
+    threadViews: {
+      [`1:${nextThreadId}`]: {
+        hostId: 1,
+        projectId: 1,
+        threadId: nextThreadId,
+        currentThread: gatewayThreadFixture(
+          { id: nextThreadId, name: "Next selected thread" },
+          { projectId: 1 },
+        ),
+        history: { thread: { id: nextThreadId, turns: [] } },
+        events: [],
+        olderTurnsCursor: null,
+        newerTurnsCursor: null,
+        lastEventId: 0,
+        eventEpoch: "",
+        loading: false,
+        error: null,
+      },
+    },
+  });
+
+  await page.evaluate(() => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    void driver.turns.sendTurn("This send must remain on the original thread", {
+      model: "gpt-5.6-sol",
+    });
+  });
+  await expect.poll(() => deferredRealtimeTurnStartRequests(page).length).toBe(1);
+
+  await page.evaluate((nextThreadId) => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    const view = driver.views.threadViews[`1:${nextThreadId}`];
+    if (!view) throw new Error("Next thread view is unavailable");
+    driver.navigation.selectedThreadId = nextThreadId;
+    driver.views.currentThread = view.currentThread;
+    driver.views.history = view.history;
+    driver.views.timelineTurns = view.timelineTurns;
+    driver.views.events = view.events;
+    driver.views.loading = true;
+  }, nextThreadId);
+  releaseDeferredRealtimeTurnStartRoute(page);
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ originalThreadId, acceptedTurnId }) => {
+          const driver = window.__codexGatewayE2e;
+          if (!driver) throw new Error("Gateway E2E driver is unavailable");
+          return driver.views.threadViews[`1:${originalThreadId}`]?.history?.thread.turns.some(
+            (turn) => turn.id === acceptedTurnId,
+          );
+        },
+        { originalThreadId, acceptedTurnId },
+      ),
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(
+      ({ nextThreadId, acceptedTurnId }) => {
+        const driver = window.__codexGatewayE2e;
+        if (!driver) throw new Error("Gateway E2E driver is unavailable");
+        return {
+          selectedThreadId: driver.navigation.selectedThreadId,
+          nextHasAcceptedTurn: driver.views.threadViews[
+            `1:${nextThreadId}`
+          ]?.history?.thread.turns.some((turn) => turn.id === acceptedTurnId),
+          selectedLoading: driver.views.loading,
+          originalModel:
+            driver.composer.threadSettingsByKey[`1:${originalThreadId}`]?.model ?? null,
+          nextModel: driver.composer.threadSettingsByKey[`1:${nextThreadId}`]?.model ?? null,
+        };
+      },
+      { originalThreadId, nextThreadId, acceptedTurnId },
+    ),
+  ).toEqual({
+    selectedThreadId: nextThreadId,
+    nextHasAcceptedTurn: false,
+    selectedLoading: true,
+    originalModel: "gpt-5.6-sol",
+    nextModel: null,
+  });
 });
 
 test("live terminal event updates selected thread even when snapshot cursor is ahead", async ({

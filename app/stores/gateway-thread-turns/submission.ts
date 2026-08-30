@@ -16,7 +16,11 @@ import {
   pinnedKey,
 } from "@/stores/gateway/thread-utils/identity";
 import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity";
-import { requestScrollToLatest, syncSelectedRoute } from "@/stores/gateway/thread-open/view-state";
+import {
+  cacheSelectedThreadView,
+  requestScrollToLatest,
+  syncSelectedRoute,
+} from "@/stores/gateway/thread-open/view-state";
 import {
   createClientUserMessageId,
   optimisticUserContent,
@@ -45,6 +49,9 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
   if (hostId === null || threadId === null) {
     return;
   }
+  const targetIsSelected = () =>
+    navigation.selectedHostId === hostId && navigation.selectedThreadId === threadId;
+  cacheSelectedThreadView();
 
   const selectedProjectId = navigation.selectedProjectId;
   const resolveCurrentProject = () =>
@@ -62,12 +69,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
     // catalog. Treat the first submit as a readiness boundary instead of rejecting it and forcing
     // the user to send the same message again after hydration happens to finish.
     await navigation.refreshHostProjects(hostId);
-    if (
-      !sessionIsCurrent() ||
-      navigation.selectedHostId !== hostId ||
-      navigation.selectedThreadId !== threadId
-    )
-      return;
+    if (!sessionIsCurrent()) return;
     project = resolveCurrentProject();
   }
   if (project === undefined) {
@@ -76,7 +78,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
   }
   const projectId = project.id;
   // Heal stale route/cache state so later actions cannot keep submitting a foreign host project.
-  if (navigation.selectedProjectId !== projectId) {
+  if (targetIsSelected() && navigation.selectedProjectId !== projectId) {
     navigation.selectedProjectId = projectId;
     syncSelectedRoute({ replace: true });
   }
@@ -93,12 +95,18 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
   // or restored layout left the strict two-pixel end detector detached. Issue the command before
   // the optimistic append; the viewport consumes it after Vue commits that row and uses TanStack's
   // public scrollToEnd transaction instead of writing scrollTop directly.
-  requestScrollToLatest();
+  if (targetIsSelected()) requestScrollToLatest();
   const optimisticContent = optimisticUserContent(text, options);
   if (steerTurnId !== null) {
-    insertOptimisticSteerMessage(threadId, steerTurnId, clientUserMessageId, optimisticContent);
+    insertOptimisticSteerMessage(
+      hostId,
+      threadId,
+      steerTurnId,
+      clientUserMessageId,
+      optimisticContent,
+    );
   } else {
-    insertOptimisticNewTurnMessage(threadId, clientUserMessageId, optimisticContent);
+    insertOptimisticNewTurnMessage(hostId, threadId, clientUserMessageId, optimisticContent);
   }
 
   const requestKind = shouldSteerActiveTurn ? "steer" : "start";
@@ -126,7 +134,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
             options,
           });
 
-  views.loading = true;
+  if (targetIsSelected()) views.loading = true;
   gateway.clearError();
   try {
     const result = await runTurnRequestWithAutoRetry<TurnRequestResult>(
@@ -137,7 +145,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
     if (!sessionIsCurrent()) return;
     applyAcceptedTurnResult(hostId, threadId, result, clientUserMessageId, optimisticContent);
     if (!shouldSteerActiveTurn) {
-      composer.updateSelectedThreadSettings({
+      composer.setThreadSettings(hostId, threadId, {
         ...(options.model !== undefined ? { model: options.model } : {}),
         ...(options.effort !== undefined ? { effort: options.effort } : {}),
         ...(options.approvalPolicy !== undefined ? { approvalPolicy: options.approvalPolicy } : {}),
@@ -155,7 +163,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
       runtimeStore.setThreadStatus(hostId, threadId, "completed");
     }
   } finally {
-    if (sessionIsCurrent()) views.loading = false;
+    if (sessionIsCurrent() && targetIsSelected()) views.loading = false;
   }
 }
 
@@ -214,7 +222,7 @@ function applyAcceptedTurnResult(
     if (startedTurnId !== "" && !startedTurnId.startsWith("client-")) {
       runtime.setThreadStatus(hostId, threadId, "running", { turnId: startedTurnId });
     }
-    mergeStartedTurn(threadId, result.turn);
+    mergeStartedTurn(hostId, threadId, result.turn);
   }
   if (
     result?.type === "turn.start.accepted" &&
@@ -222,13 +230,19 @@ function applyAcceptedTurnResult(
     result.turn?.items !== undefined &&
     result.turn.items.length > 0
   ) {
-    mergeTurnItems(threadId, result.turn);
+    mergeTurnItems(hostId, threadId, result.turn);
   }
   if (
     result?.type === "turn.steer.accepted" &&
     result.turnId !== undefined &&
     result.turnId !== ""
   ) {
-    insertOptimisticSteerMessage(threadId, result.turnId, clientUserMessageId, optimisticContent);
+    insertOptimisticSteerMessage(
+      hostId,
+      threadId,
+      result.turnId,
+      clientUserMessageId,
+      optimisticContent,
+    );
   }
 }
