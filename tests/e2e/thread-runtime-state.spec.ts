@@ -45,7 +45,16 @@ test("opening completed history does not show fake thinking", async ({ page }) =
   });
   await openApp(page);
   const threadId = "e2e-completed-thread";
-  const fullAgentResponse = "done\n\nA complete second paragraph.";
+  const codeSnippet = "read and apply:\n/root/AGENTS.md\n/root/project/AGENTS.md";
+  const fullAgentResponse = [
+    "done",
+    "",
+    "A complete second paragraph.",
+    "",
+    "```text",
+    codeSnippet,
+    "```",
+  ].join("\n");
   const startedEvent = {
     id: 1,
     hostId: 1,
@@ -142,6 +151,17 @@ test("opening completed history does not show fake thinking", async ({ page }) =
   await expect(
     page.locator("[data-sonner-toast]").getByText(/Full response copied|完整回复已复制/),
   ).toBeVisible();
+  const copyCodeButton = page.getByTestId("copy-markdown-code-button");
+  await expect(copyCodeButton).toBeVisible();
+  await copyCodeButton.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as typeof window & { __copiedAgentResponse?: string }).__copiedAgentResponse,
+      ),
+    )
+    .toBe(`${codeSnippet}\n`);
+  await expect(copyCodeButton).toHaveText(/Code copied|代码已复制/);
   await expect(page.getByText(/Thinking|思考中/)).toBeHidden();
 
   await seedGatewayThread(page, {

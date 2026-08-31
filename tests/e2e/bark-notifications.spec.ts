@@ -74,7 +74,7 @@ test("Bark keeps monitoring an active main turn after the last browser closes", 
   });
   await remoteWorkspace.startThread(project.id);
   await page
-    .getByPlaceholder("输入后续修改要求")
+    .getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)
     .fill(
       [
         "运行下面的命令，命令结束后简短回复。",
@@ -107,6 +107,52 @@ test("Bark keeps monitoring an active main turn after the last browser closes", 
   expect((await bark.readRequests())[0]?.title).toContain("Turn finished");
 });
 
+test("Bark does not notify when the user stops an active turn", async ({
+  page,
+  remoteWorkspace,
+}) => {
+  const bark = await useBarkReceiver();
+  await openApp(page);
+  await configureBarkNotifications(page, bark.url);
+
+  const { project } = await remoteWorkspace.provision({
+    hostName: `bark-stopped-turn-host-${Date.now()}`,
+  });
+  await remoteWorkspace.startThread(project.id);
+  await page
+    .getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)
+    .fill(
+      [
+        "运行下面的命令，等待我手动停止，不要提前回复。",
+        "python - <<'PY'",
+        "import time",
+        "time.sleep(30)",
+        "print('stopped turn unexpectedly finished')",
+        "PY",
+      ].join("\n"),
+    );
+  await page.getByTestId("send-turn-button").click();
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Stop generation|停止生成/,
+    { timeout: 30_000 },
+  );
+  await page.getByTestId("send-turn-button").click();
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Interrupted|已中断/,
+    { timeout: 30_000 },
+  );
+
+  // Delivery is asynchronous after the terminal event. Give the notification center enough time
+  // to publish if the interrupted turn were incorrectly considered eligible.
+  await page.waitForTimeout(2_000);
+  expect(await bark.readRequests()).toHaveLength(0);
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" }),
+  ).toHaveCount(0);
+});
+
 test("plan-mode user questions render and notify through Sonner and Bark", async ({
   page,
   remoteWorkspace,
@@ -118,13 +164,13 @@ test("plan-mode user questions render and notify through Sonner and Bark", async
   const hostName = `bark-plan-question-host-${Date.now()}`;
   const { project } = await remoteWorkspace.provision({ hostName });
   await remoteWorkspace.startThread(project.id);
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  await page.getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/).fill("/");
   await page.getByTestId("slash-command-plan").click();
   await expect(page.getByTestId("composer-mode-strip").getByText("计划模式").first()).toBeVisible();
 
   const question = `请选择 E2E 方案 ${Date.now()}`;
   await page
-    .getByPlaceholder("输入后续修改要求")
+    .getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)
     .fill(
       `先不要制定计划或回复正文。立即调用 request_user_input，只询问“${question}”，提供“方案 A”和“方案 B”两个选项。`,
     );
