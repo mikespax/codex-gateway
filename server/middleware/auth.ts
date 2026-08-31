@@ -4,6 +4,8 @@ import { authenticateEvent } from "../utils/gateway/auth/context";
 const PUBLIC_API_PATHS = new Set([
   "/api/auth/login",
   "/api/realtime",
+  "/api/supervisor/thread",
+  "/api/supervisor/thread/events",
   "/api/android/device/revoke",
   "/api/android/device/reply",
   "/api/android/device/token",

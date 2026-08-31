@@ -168,6 +168,20 @@ function migrate(db: DatabaseSync) {
       PRIMARY KEY (device_id, client_message_id)
     );
 
+    CREATE TABLE IF NOT EXISTS supervisor_grants (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      host_id INTEGER NOT NULL,
+      project_id INTEGER,
+      thread_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_tmux_monitors_host
@@ -181,5 +195,9 @@ function migrate(db: DatabaseSync) {
       ON android_devices(user_id, fcm_token_hash) WHERE is_active = 1;
     CREATE INDEX IF NOT EXISTS idx_android_notifications_expiry
       ON android_notifications(device_id, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_supervisor_grants_token_hash
+      ON supervisor_grants(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_supervisor_grants_expiry
+      ON supervisor_grants(user_id, expires_at);
   `);
 }
