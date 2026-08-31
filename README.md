@@ -29,10 +29,10 @@ app-server thread as the source of truth.
 <table>
   <tr>
     <td width="50%">
-      <a href="docs/assets/spax-customizations/mobile-running-turn.png"><img src="docs/assets/spax-customizations/mobile-running-turn.png" alt="Spax fork mobile running-turn view" width="100%"></a>
+      <a href="docs/assets/spax-customizations/mobile-running-turn.png"><img src="docs/assets/spax-customizations/mobile-running-turn.png" alt="Codex Gateway Extended mobile running-turn view" width="100%"></a>
     </td>
     <td width="50%">
-      <a href="docs/assets/spax-customizations/mobile-model-effort-dialog.png"><img src="docs/assets/spax-customizations/mobile-model-effort-dialog.png" alt="Spax fork mobile model and effort confirmation" width="100%"></a>
+      <a href="docs/assets/spax-customizations/mobile-model-effort-dialog.png"><img src="docs/assets/spax-customizations/mobile-model-effort-dialog.png" alt="Codex Gateway Extended mobile model and effort confirmation" width="100%"></a>
     </td>
   </tr>
 </table>
