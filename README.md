@@ -12,6 +12,9 @@
 
 English | [中文](README.zh-CN.md)
 
+This fork's deployment-specific interface and operations changes are documented in
+[Spax fork customizations](docs/spax-fork-customizations.md).
+
 Codex Gateway is a web frontend and connection gateway for the official Codex app-server.
 
 It is not a reimplementation of Codex, and it does not run an agent runtime in the browser. The browser talks only to Codex Gateway. Gateway connects to your remote machines over SSH, manages the official `codex app-server` lifecycle, and renders official app-server threads, events, approvals, file changes, images, diffs, terminal output, and sub-agent activity in a web UI.

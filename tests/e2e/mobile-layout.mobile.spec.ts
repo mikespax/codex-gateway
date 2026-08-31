@@ -250,7 +250,9 @@ test("shows effort and compact context usage without mobile approval controls", 
   page,
 }) => {
   await openApp(page);
+  const settingsUpdates: Array<Record<string, unknown>> = [];
   await page.route("**/api/threads/settings", async (route) => {
+    settingsUpdates.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   const threadId = "mobile-composer-settings";
@@ -282,6 +284,11 @@ test("shows effort and compact context usage without mobile approval controls", 
         id: "gpt-5.6-sol",
         model: "gpt-5.6-sol",
         displayName: "GPT-5.6 Sol",
+        supportedReasoningEfforts: [
+          { reasoningEffort: "low" },
+          { reasoningEffort: "medium" },
+          { reasoningEffort: "high" },
+        ],
       },
     ],
     tokenUsage: {
@@ -296,33 +303,56 @@ test("shows effort and compact context usage without mobile approval controls", 
   await expect(page.getByText("完全访问", { exact: true })).toBeHidden();
   const contextMeter = page.getByTestId("context-usage-meter");
   await expect(contextMeter).toBeVisible();
-  await expect(contextMeter).toHaveAttribute("aria-label", "上下文用量 50%");
+  await expect(contextMeter).toHaveAttribute("aria-label", /50%/);
   await expect(contextMeter.getByText("50%", { exact: true })).toBeHidden();
 
   await page.getByTestId("model-select").click();
-  const modelSearch = page.getByPlaceholder("搜索模型或推理强度");
-  await expect(modelSearch).toBeVisible();
-  await expect(modelSearch).not.toBeFocused();
-  await modelSearch.click();
-  await expect(modelSearch).toBeFocused();
-  await modelSearch.fill("luna");
+  await expect(page.getByTestId("model-selector-dialog")).toBeVisible();
+  await expect(page.getByTestId("reasoning-effort-select")).toContainText("Medium");
+  await expect(page.getByTestId("model-dropdown-select")).toContainText("GPT-5.6 Luna");
+
+  await page.getByTestId("reasoning-effort-select").click();
+  await page.getByTestId("effort-option-high").click();
+  await page.getByTestId("model-dropdown-select").click();
   await expect(page.getByTestId("model-option-gpt-5.6-luna")).toBeVisible();
-  await expect(page.getByTestId("model-option-gpt-5.6-sol")).toBeHidden();
-  await modelSearch.fill("");
-
-  await page.getByText("High", { exact: true }).click();
-  await expect(modelSearch).toBeVisible();
-  await expect(page.getByTestId("model-select")).toContainText("High");
   await page.getByTestId("model-option-gpt-5.6-sol").click();
-  await expect(modelSearch).toBeVisible();
-  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Sol");
+  await expect(page.getByTestId("model-select")).toContainText("Medium");
+  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Luna");
+  expect(settingsUpdates).toHaveLength(0);
 
-  await page.getByTestId("model-selector-close").click();
-  await expect(modelSearch).toBeHidden();
+  await page.getByTestId("model-selector-cancel").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  await expect(page.getByTestId("model-select")).toContainText("Medium");
+  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Luna");
+
   await page.getByTestId("model-select").click();
-  await expect(modelSearch).toBeVisible();
+  await page.getByTestId("reasoning-effort-select").click();
+  await page.getByTestId("effort-option-high").click();
+  await page.getByTestId("model-dropdown-select").click();
+  await page.getByTestId("model-option-gpt-5.6-sol").click();
+  await page.getByTestId("model-selector-ok").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  await expect(page.getByTestId("model-select")).toContainText("High");
+  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Sol");
+  expect(settingsUpdates).toHaveLength(1);
+  expect(settingsUpdates[0]).toMatchObject({
+    hostId: 1,
+    threadId,
+    model: "gpt-5.6-sol",
+    effort: "high",
+  });
+
+  await page.getByTestId("model-select").click();
+  await page.getByTestId("reasoning-effort-select").click();
+  await page.getByTestId("effort-option-low").click();
+  await page.getByTestId("model-selector-close").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  await expect(page.getByTestId("model-select")).toContainText("High");
+  await page.getByTestId("model-select").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeVisible();
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 4, y: 4 } });
-  await expect(modelSearch).toBeHidden();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  expect(settingsUpdates).toHaveLength(1);
 
   const attachmentInput = page.getByTestId("attachment-input");
   await expect(page.getByTestId("attachment-button")).toBeVisible();
@@ -349,7 +379,7 @@ test("shows effort and compact context usage without mobile approval controls", 
     ),
   });
   await expect(page.getByAltText("mobile-preview.png")).toBeVisible();
-  await page.getByRole("button", { name: "移除附件" }).click();
+  await page.getByRole("button", { name: /Remove attachment|移除附件/ }).click();
   await expect(page.getByAltText("mobile-preview.png")).toHaveCount(0);
 
   let uploadCount = 0;

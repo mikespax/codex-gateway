@@ -73,8 +73,7 @@ const emit = defineEmits<{
   fileReferenceLimit: [message: string];
   primaryAction: [];
   updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
-  selectModel: [model: string];
-  selectEffort: [effort: ReasoningEffort];
+  applyModelEffort: [selection: { model: string; effort: ReasoningEffort }];
 }>();
 
 const documentUploadInput = ref<HTMLInputElement | null>(null);
@@ -284,8 +283,7 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           @attach="openAttachmentPicker"
           @primary-action="emit('primaryAction')"
           @update-selected-approval-mode="emit('updateSelectedApprovalMode', $event)"
-          @select-model="emit('selectModel', $event)"
-          @select-effort="emit('selectEffort', $event)"
+          @apply-model-effort="emit('applyModelEffort', $event)"
         />
       </div>
     </div>

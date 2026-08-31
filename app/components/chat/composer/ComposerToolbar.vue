@@ -52,8 +52,7 @@ defineProps<{
 const emit = defineEmits<{
   attach: [kind: "documents" | "media"];
   primaryAction: [];
-  selectModel: [model: string];
-  selectEffort: [effort: ReasoningEffort];
+  applyModelEffort: [selection: { model: string; effort: ReasoningEffort }];
   updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
 }>();
 </script>
@@ -122,8 +121,7 @@ const emit = defineEmits<{
           :effort-options="effortOptions"
           :label-effort-option="labelEffortOption"
           :model-option-value="modelOptionValue"
-          @select-model="emit('selectModel', $event)"
-          @select-effort="emit('selectEffort', $event)"
+          @apply="emit('applyModelEffort', $event)"
         />
       </div>
       <Button

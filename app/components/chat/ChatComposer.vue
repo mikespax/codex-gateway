@@ -48,8 +48,7 @@ const {
   resumeSelectedThreadGoal,
   clearSelectedThreadGoal,
   setSelectedApprovalMode,
-  setSelectedEffort,
-  setSelectedModel,
+  applySelectedModelEffort,
   slashMenuOpen,
   turnText,
   uploadingAttachments,
@@ -108,7 +107,6 @@ const {
     @file-reference-limit="handleFileReferenceLimit"
     @primary-action="handlePrimaryAction"
     @update-selected-approval-mode="setSelectedApprovalMode"
-    @select-model="setSelectedModel"
-    @select-effort="setSelectedEffort"
+    @apply-model-effort="applySelectedModelEffort"
   />
 </template>

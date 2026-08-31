@@ -399,6 +399,8 @@
     "removeAttachment": "移除附件",
     "attachedFileReferences": "已附加文件，远端路径：",
     "model": "模型",
+    "modelAndReasoning": "模型与推理",
+    "ok": "确定",
     "searchModels": "搜索模型或推理强度",
     "noMatchingModels": "没有匹配的模型或推理强度",
     "contextUsage": "上下文用量 {percent}%",

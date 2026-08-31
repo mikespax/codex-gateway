@@ -159,6 +159,18 @@ export function useThreadSettingsControls() {
     selectedEffort.value = effort;
   }
 
+  function applySelectedModelEffort(selection: { model: string; effort: ReasoningEffort }) {
+    if (selectedThreadId.value === null) {
+      newThreadModel.value = selection.model;
+      newThreadEffort.value = selection.effort;
+      return;
+    }
+    void composer.saveSelectedThreadSettings({
+      model: trimmedOrNull(selection.model),
+      effort: selection.effort === "default" ? null : selection.effort,
+    });
+  }
+
   function setSelectedApprovalMode(value: ApprovalPolicy | "custom") {
     selectedApprovalMode.value = value;
   }
@@ -177,6 +189,7 @@ export function useThreadSettingsControls() {
     modelOptionValue,
     setSelectedModel,
     setSelectedEffort,
+    applySelectedModelEffort,
     setSelectedApprovalMode,
   };
 }
