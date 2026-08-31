@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import type { VirtualItem } from "@tanstack/virtual-core";
 import { useDocumentVisibility, useElementVisibility, useEventListener } from "@vueuse/core";
+import { storeToRefs } from "pinia";
 import type { ComponentPublicInstance } from "vue";
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, nextTick, ref, watch } from "vue";
 import {
   CHAT_VIEWPORT_LAYOUT_REVISION,
   ChatVirtualScrollFrame,
   useChatVirtualizer,
 } from "@/components/common/chat-virtualizer";
+import { useGatewayAppearanceStore } from "@/stores/gateway-appearance";
 
 interface TimelineViewportRow {
   key: string;
@@ -26,6 +28,8 @@ const emit = defineEmits<{
   userDetachedChange: [detached: boolean];
 }>();
 
+const appearance = useGatewayAppearanceStore();
+const { chatTextFontSize, chatTextSize } = storeToRefs(appearance);
 const scrollFrameRef = ref<InstanceType<typeof ChatVirtualScrollFrame> | null>(null);
 // Keep end following strict like TanStack's Chat default: a reader who moves even slightly away
 // from latest owns that position. The larger top threshold is only an ergonomic history trigger;
@@ -62,6 +66,9 @@ const chatVirtualizer = useChatVirtualizer({
     }
   },
 });
+const chatTextStyle = computed(() => ({
+  "--chat-message-font-size": chatTextFontSize.value,
+}));
 
 const virtualRows = chatVirtualizer.virtualItems;
 const viewportElement = computed(() => scrollViewport());
@@ -125,6 +132,16 @@ watch(viewportVisible, (visible, previous) => {
 watch(documentVisibility, (visibility, previous) => {
   if (visibility === "visible" && previous !== "visible") chatVirtualizer.refresh();
 });
+
+watch(
+  chatTextFontSize,
+  async () => {
+    await nextTick();
+    chatVirtualizer.refresh();
+    if (chatVirtualizer.followLatest.value) resetFollowLatest();
+  },
+  { flush: "post" },
+);
 
 if (workspaceLayoutRevision !== null) {
   watch(workspaceLayoutRevision, () => {
@@ -194,6 +211,8 @@ function handleViewportReady() {
     data-testid="chat-scroll-area"
     :data-follow-latest="chatVirtualizer.followLatest.value ? 'true' : 'false'"
     :data-is-scrolling="chatVirtualizer.isScrolling.value ? 'true' : 'false'"
+    :data-chat-text-size="chatTextSize"
+    :style="chatTextStyle"
     class="h-full min-h-0 flex-1 overflow-hidden"
     @viewport-ready="handleViewportReady"
   >
