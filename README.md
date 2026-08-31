@@ -1,4 +1,4 @@
-# Codex Gateway
+# Codex Gateway Extended
 
 [![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)](nuxt.config.ts)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](package.json)
@@ -10,9 +10,18 @@
 
 English | [中文](README.zh-CN.md)
 
+**A mobile-first, multi-host command center for official Codex app-server
+sessions.**
+
+Codex Gateway Extended is designed for running serious Codex work from phones
+and browsers. It adds resilient conversation routing, readable live progress,
+document and archive uploads, cross-host navigation, native Android completion
+replies, and scoped read-only supervision while keeping the official Codex
+app-server thread as the source of truth.
+
 > [!NOTE]
-> This branch contains the Spax mobile workflow, attachment, notification,
-> navigation, reliability, and read-only supervision extensions. See the
+> This is a deployment-focused fork of
+> [Codex Gateway](https://github.com/yunhaoli24/codex-gateway). See the
 > [exhaustive fork inventory](docs/spax-fork-customizations.md) for screenshots,
 > the complete 34-commit change map, security boundaries, deployment status, and
 > upstream contribution strategy.
@@ -28,7 +37,7 @@ English | [中文](README.zh-CN.md)
   </tr>
 </table>
 
-Codex Gateway is a web frontend and connection gateway for the official Codex app-server.
+Under the hood, Codex Gateway is a web frontend and connection gateway for the official Codex app-server.
 
 It is not a reimplementation of Codex, and it does not run an agent runtime in the browser. The browser talks only to Codex Gateway. Gateway connects to your remote machines over SSH, manages the official `codex app-server` lifecycle, and renders official app-server threads, events, approvals, file changes, images, diffs, terminal output, and sub-agent activity in a web UI.
 
@@ -188,8 +197,9 @@ Core rules:
 Prerequisites: Docker with Compose, Git, and network access from Gateway to the SSH hosts you want to manage.
 
 ```bash
-git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
-cd codex-gateway
+git clone --recurse-submodules --branch spax/customizations-20260824 \
+  https://github.com/mikespax/codex-gateway-extended.git
+cd codex-gateway-extended
 
 cp .env.example .env
 # Replace CODEX_GATEWAY_CONFIG_SECRET in .env with: openssl rand -hex 32

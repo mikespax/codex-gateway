@@ -1,4 +1,4 @@
-# Codex Gateway Android companion
+# Codex Gateway Extended Android companion
 
 This small Android app receives Codex Gateway turn-completion notifications through Firebase
 Cloud Messaging (FCM). A reply entered in the notification starts a new turn in the exact thread

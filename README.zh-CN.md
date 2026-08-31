@@ -1,4 +1,4 @@
-# Codex Gateway
+# Codex Gateway Extended
 
 [![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)](nuxt.config.ts)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](package.json)
@@ -9,6 +9,12 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [English](README.md) | 中文
+
+> **面向官方 Codex app-server 会话的移动优先、多主机控制中心。**
+>
+> Codex Gateway Extended 专为通过手机和浏览器运行长时间 Codex 工作而设计。它在保留官方
+> Codex app-server thread 作为唯一事实源的同时，增加了可靠的会话路由、清晰的实时进度、
+> 文档与压缩包上传、跨主机导航、Android 原生完成通知回复，以及受限的只读监督功能。
 
 Codex Gateway 是一个面向官方 Codex app-server 的 Web 前端与连接网关。
 
@@ -169,8 +175,9 @@ Browser
 前置条件：安装 Docker Compose 和 Git，并确保 Gateway 所在机器可以访问需要管理的 SSH 主机。
 
 ```bash
-git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
-cd codex-gateway
+git clone --recurse-submodules --branch spax/customizations-20260824 \
+  https://github.com/mikespax/codex-gateway-extended.git
+cd codex-gateway-extended
 
 cp .env.example .env
 # 使用 openssl rand -hex 32 替换 .env 中的 CODEX_GATEWAY_CONFIG_SECRET
@@ -201,16 +208,16 @@ pnpm test:e2e
 
 环境变量：
 
-| 变量 | 是否必需 | 说明 |
-| --- | --- | --- |
-| `CODEX_GATEWAY_CONFIG_SECRET` | 生产环境必需 | 用于加密保存 host/project/thread 配置的稳定 secret。 |
-| `CODEX_GATEWAY_DB_PATH` | 否 | SQLite 数据库路径。Docker 默认使用 `/data/codex-gateway.db`。 |
-| `HOST` | 否 | Nuxt 监听地址。Docker 使用 `0.0.0.0`。 |
-| `PORT` | 否 | Nuxt 监听端口。Docker 使用 `3000`。 |
-| `BROWSER_PREVIEW_DOMAIN` | 使用浏览器预览时 | 隔离预览 origin 使用的父域名；需要为 `p-*.your-domain` 配置 wildcard DNS。 |
-| `BROWSER_PREVIEW_SECRET` | 否 | 为 user/Host/target 生成稳定预览 origin 的 HMAC secret。默认复用 `CODEX_GATEWAY_CONFIG_SECRET`。 |
-| `BROWSER_PREVIEW_SCHEME` | 否 | 公开预览协议，默认 `https`。仅本地 E2E/开发使用 `http`。 |
-| `BROWSER_PREVIEW_PUBLIC_PORT` | 否 | 本地开发时写入预览 origin 的可选公开端口。 |
+| 变量                          | 是否必需         | 说明                                                                                             |
+| ----------------------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
+| `CODEX_GATEWAY_CONFIG_SECRET` | 生产环境必需     | 用于加密保存 host/project/thread 配置的稳定 secret。                                             |
+| `CODEX_GATEWAY_DB_PATH`       | 否               | SQLite 数据库路径。Docker 默认使用 `/data/codex-gateway.db`。                                    |
+| `HOST`                        | 否               | Nuxt 监听地址。Docker 使用 `0.0.0.0`。                                                           |
+| `PORT`                        | 否               | Nuxt 监听端口。Docker 使用 `3000`。                                                              |
+| `BROWSER_PREVIEW_DOMAIN`      | 使用浏览器预览时 | 隔离预览 origin 使用的父域名；需要为 `p-*.your-domain` 配置 wildcard DNS。                       |
+| `BROWSER_PREVIEW_SECRET`      | 否               | 为 user/Host/target 生成稳定预览 origin 的 HMAC secret。默认复用 `CODEX_GATEWAY_CONFIG_SECRET`。 |
+| `BROWSER_PREVIEW_SCHEME`      | 否               | 公开预览协议，默认 `https`。仅本地 E2E/开发使用 `http`。                                         |
+| `BROWSER_PREVIEW_PUBLIC_PORT` | 否               | 本地开发时写入预览 origin 的可选公开端口。                                                       |
 
 创建管理员用户：
 
