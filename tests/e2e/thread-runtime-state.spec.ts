@@ -25,6 +25,104 @@ const storedRouteSelectionSchema = z.object({
   threadId: z.string().nullable(),
 });
 
+test("a turn row arriving before runtime activation opens when running and closes on completion", async ({
+  page,
+}) => {
+  await openApp(page);
+  const threadId = "e2e-intermediate-runtime-transition";
+  const startedAt = Math.floor(Date.now() / 1000) - 2;
+  const runningTurn = appServerTurnFixture({
+    id: "turn-intermediate-runtime-transition",
+    status: "inProgress",
+    startedAt,
+    items: [
+      {
+        id: "user-intermediate-runtime-transition",
+        type: "userMessage",
+        content: [{ type: "text", text: "show live work from the beginning" }],
+      },
+      {
+        id: "reasoning-intermediate-runtime-transition",
+        type: "reasoning",
+        status: "inProgress",
+        summary: ["Live work should already be visible"],
+      },
+    ],
+  });
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Intermediate runtime transition" },
+    history: { thread: { id: threadId, turns: [runningTurn] } },
+    status: "idle",
+  });
+
+  const intermediateToggle = page.getByRole("button", {
+    name: /Intermediate steps|中间过程/,
+  });
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await expect(page.getByTestId("intermediate-steps-working")).toHaveCount(0);
+  await expect(page.getByTestId("intermediate-header-duration")).toHaveCount(0);
+  await expect(page.getByTestId("message-timestamp")).toHaveAttribute(
+    "datetime",
+    new Date(startedAt * 1000).toISOString(),
+  );
+
+  await page.evaluate((threadId) => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    driver.runtime.setThreadStatus(1, threadId, "running", {
+      turnId: "turn-intermediate-runtime-transition",
+    });
+  }, threadId);
+
+  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
+  await expect(page.getByText("Live work should already be visible")).toBeVisible();
+  await expect(page.getByTestId("intermediate-steps-working")).toBeVisible();
+  await expect(page.getByTestId("intermediate-header-duration")).toBeVisible();
+
+  const completedTurn = appServerTurnFixture({
+    ...runningTurn,
+    status: "completed",
+    completedAt: startedAt + 3,
+    durationMs: 3_000,
+    items: [
+      ...runningTurn.items,
+      {
+        id: "agent-intermediate-runtime-transition-final",
+        type: "agentMessage",
+        phase: "final_answer",
+        status: "completed",
+        text: "The live work is complete",
+      },
+    ],
+  });
+  await applyGatewayLiveEvent(page, {
+    id: 1,
+    hostId: 1,
+    threadId,
+    method: "turn/completed",
+    payload: { method: "turn/completed", params: { threadId, turn: completedTurn } },
+    createdAt: new Date().toISOString(),
+  });
+
+  await expect(page.getByText("The live work is complete")).toBeVisible();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await expect(page.getByTestId("intermediate-steps-working")).toHaveCount(0);
+  await expect(page.getByTestId("intermediate-header-duration")).toHaveCount(0);
+  await expect(page.getByTestId("message-timestamp")).toHaveCount(2);
+  await expect(page.getByTestId("message-timestamp").last()).toHaveAttribute(
+    "datetime",
+    new Date((startedAt + 3) * 1000).toISOString(),
+  );
+
+  await intermediateToggle.click();
+  await expect(
+    page.getByRole("paragraph").filter({ hasText: "Live work should already be visible" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("reasoning-duration")).toHaveCount(0);
+});
+
 test("opening completed history does not show fake thinking", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {

@@ -6,13 +6,13 @@ import { computed, ref, watch } from "vue";
 import { isItemInProgress } from "@/utils/thread-items";
 import { formatDurationMs, itemCompletedAtMs, itemStartedAtMs } from "@/utils/item-timing";
 
-const props = defineProps<{ item: ThreadHistoryItem }>();
+const props = defineProps<{ item: ThreadHistoryItem; live?: boolean }>();
 
 const { t } = useI18n();
 const { timestamp: now, pause, resume } = useTimestamp({ controls: true, interval: 250 });
 const localStartedAt = ref(Date.now());
 
-const inProgress = computed(() => isItemInProgress(props.item));
+const inProgress = computed(() => props.live !== false && isItemInProgress(props.item));
 const durationMs = computed(() => Number(props.item.durationMs || props.item.duration_ms || 0));
 const startedAt = computed(() => itemStartedAtMs(props.item) ?? localStartedAt.value);
 const completedAt = computed(() => itemCompletedAtMs(props.item));
@@ -24,6 +24,7 @@ const progressPercent = computed(() => {
   return Math.max(0, Math.min(100, (elapsedMs.value / durationMs.value) * 100));
 });
 const timeLabel = computed(() => {
+  if (!inProgress.value && completedAt.value === null) return t("app.completed");
   if (!durationMs.value) return formatDurationMs(elapsedMs.value);
   return `${formatDurationMs(elapsedMs.value)} / ${formatDurationMs(durationMs.value)}`;
 });

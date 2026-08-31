@@ -12,12 +12,19 @@ const props = defineProps<{
   userMessageVariant?: "normal" | "steer";
   turnTiming?: DisplayedTurnTiming | null;
   agentActionsAvailable?: boolean;
+  sentAt?: number | string | null;
+  turnIsActive?: boolean;
 }>();
 
 const itemComponent = computed(() => componentForThreadItem(props.item.type));
-const itemPresentationProps = computed(() =>
-  props.section === "intermediate" && props.item.type === "fileChange" ? { hideDetails: true } : {},
-);
+const itemPresentationProps = computed(() => {
+  if (props.section !== "intermediate") return {};
+  if (props.item.type === "fileChange") return { hideDetails: true };
+  if (["contextCompaction", "reasoning", "sleep"].includes(props.item.type)) {
+    return { live: props.turnIsActive === true };
+  }
+  return {};
+});
 </script>
 
 <template>
@@ -30,5 +37,6 @@ const itemPresentationProps = computed(() =>
     :variant="userMessageVariant"
     :turn-timing="item.type === 'agentMessage' ? turnTiming : undefined"
     :agent-actions-available="item.type === 'agentMessage' && agentActionsAvailable"
+    :sent-at="item.type === 'userMessage' || item.type === 'agentMessage' ? sentAt : undefined"
   />
 </template>

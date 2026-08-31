@@ -31,6 +31,7 @@ export function insertOptimisticSteerMessage(
       id: clientUserMessageId,
       clientId: clientUserMessageId,
       turnId,
+      createdAt: Date.now(),
       content,
     }),
   );
@@ -47,6 +48,7 @@ export function insertOptimisticNewTurnMessage(
       type: "userMessage",
       id: clientUserMessageId,
       clientId: clientUserMessageId,
+      createdAt: Date.now(),
       content,
     }),
   );

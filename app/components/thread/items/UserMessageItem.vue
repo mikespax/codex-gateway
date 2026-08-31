@@ -4,6 +4,7 @@ import { Message, MessageContent } from "@codex-gateway/ai-elements/message";
 import { Badge } from "@codex-gateway/ui/badge";
 import MarkdownContent from "@/components/common/MarkdownContent.vue";
 import ThreadImageAttachment from "@/components/thread/attachments/ThreadImageAttachment.vue";
+import MessageTimestamp from "@/components/thread/MessageTimestamp.vue";
 import { threadItemText } from "@/utils/thread-items";
 import type { ThreadHistoryItem } from "~~/shared/types";
 import { recordFromUnknown } from "~~/shared/utils/records";
@@ -12,6 +13,7 @@ const props = defineProps<{
   item: ThreadHistoryItem;
   hostId: number | null;
   variant?: "normal" | "steer";
+  sentAt?: number | string | null;
 }>();
 
 const { t } = useI18n();
@@ -84,6 +86,9 @@ function imageSource(image: { type: string; url: string; path: string }) {
         </template>
       </div>
       <MarkdownContent v-if="text" :content="text" compact />
+      <div v-if="props.sentAt != null" class="flex justify-end">
+        <MessageTimestamp :value="props.sentAt" />
+      </div>
     </MessageContent>
   </Message>
 </template>

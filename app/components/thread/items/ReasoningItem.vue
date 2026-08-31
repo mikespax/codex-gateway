@@ -7,11 +7,11 @@ import MarkdownContent from "@/components/common/MarkdownContent.vue";
 import { isItemInProgress, threadItemText } from "@/utils/thread-items";
 import { formatDurationMs, itemCompletedAtMs, itemStartedAtMs } from "@/utils/item-timing";
 
-const props = defineProps<{ item: ThreadHistoryItem }>();
+const props = defineProps<{ item: ThreadHistoryItem; live?: boolean }>();
 const { t } = useI18n();
 const { timestamp: now, pause, resume } = useTimestamp({ controls: true, interval: 100 });
 const text = computed(() => threadItemText(props.item));
-const inProgress = computed(() => isItemInProgress(props.item));
+const inProgress = computed(() => props.live !== false && isItemInProgress(props.item));
 const startedAt = computed(() => itemStartedAtMs(props.item));
 const completedAt = computed(() => itemCompletedAtMs(props.item));
 const elapsedMs = computed(() => {
@@ -19,7 +19,9 @@ const elapsedMs = computed(() => {
   return (inProgress.value ? now.value : (completedAt.value ?? now.value)) - startedAt.value;
 });
 const timeLabel = computed(() =>
-  elapsedMs.value === null ? null : formatDurationMs(elapsedMs.value),
+  elapsedMs.value === null || (!inProgress.value && completedAt.value === null)
+    ? null
+    : formatDurationMs(elapsedMs.value),
 );
 
 watch(inProgress, (active) => (active ? resume() : pause()), { immediate: true });
@@ -35,6 +37,7 @@ watch(inProgress, (active) => (active ? resume() : pause()), { immediate: true }
           <span>{{ t("app.thinking") }}</span>
           <span
             v-if="timeLabel !== null"
+            data-testid="reasoning-duration"
             class="rounded-full bg-surface/80 px-2 py-0.5 font-mono text-[0.6875rem] text-ink-secondary"
             >{{ timeLabel }}</span
           >
