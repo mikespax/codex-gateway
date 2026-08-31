@@ -1,5 +1,3 @@
-
-
 # Codex Gateway
 
 [![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)](nuxt.config.ts)
@@ -12,8 +10,23 @@
 
 English | [中文](README.zh-CN.md)
 
-This fork's deployment-specific interface and operations changes are documented in
-[Spax fork customizations](docs/spax-fork-customizations.md).
+> [!NOTE]
+> This branch contains the Spax mobile workflow, attachment, notification,
+> navigation, reliability, and read-only supervision extensions. See the
+> [exhaustive fork inventory](docs/spax-fork-customizations.md) for screenshots,
+> the complete 34-commit change map, security boundaries, deployment status, and
+> upstream contribution strategy.
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="docs/assets/spax-customizations/mobile-running-turn.png"><img src="docs/assets/spax-customizations/mobile-running-turn.png" alt="Spax fork mobile running-turn view" width="100%"></a>
+    </td>
+    <td width="50%">
+      <a href="docs/assets/spax-customizations/mobile-model-effort-dialog.png"><img src="docs/assets/spax-customizations/mobile-model-effort-dialog.png" alt="Spax fork mobile model and effort confirmation" width="100%"></a>
+    </td>
+  </tr>
+</table>
 
 Codex Gateway is a web frontend and connection gateway for the official Codex app-server.
 
@@ -207,16 +220,16 @@ pnpm test:e2e
 
 Environment variables:
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `CODEX_GATEWAY_CONFIG_SECRET` | Yes in production | Stable secret used to encrypt stored host/project/thread config. |
-| `CODEX_GATEWAY_DB_PATH` | No | SQLite database path. Defaults to the app data path; Docker uses `/data/codex-gateway.db`. |
-| `HOST` | No | Nuxt listen host. Docker uses `0.0.0.0`. |
-| `PORT` | No | Nuxt listen port. Docker uses `3000`. |
-| `BROWSER_PREVIEW_DOMAIN` | Browser preview | Parent domain for isolated preview origins; configure wildcard DNS for `p-*.your-domain`. |
-| `BROWSER_PREVIEW_SECRET` | No | HMAC secret for stable per-user/Host/target preview origins. Defaults to `CODEX_GATEWAY_CONFIG_SECRET`. |
-| `BROWSER_PREVIEW_SCHEME` | No | Public preview scheme, `https` by default. Use `http` only for local E2E/development. |
-| `BROWSER_PREVIEW_PUBLIC_PORT` | No | Optional public port included in preview origins for local development. |
+| Variable                      | Required          | Description                                                                                             |
+| ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+| `CODEX_GATEWAY_CONFIG_SECRET` | Yes in production | Stable secret used to encrypt stored host/project/thread config.                                        |
+| `CODEX_GATEWAY_DB_PATH`       | No                | SQLite database path. Defaults to the app data path; Docker uses `/data/codex-gateway.db`.              |
+| `HOST`                        | No                | Nuxt listen host. Docker uses `0.0.0.0`.                                                                |
+| `PORT`                        | No                | Nuxt listen port. Docker uses `3000`.                                                                   |
+| `BROWSER_PREVIEW_DOMAIN`      | Browser preview   | Parent domain for isolated preview origins; configure wildcard DNS for `p-*.your-domain`.               |
+| `BROWSER_PREVIEW_SECRET`      | No                | HMAC secret for stable per-user/Host/target preview origins. Defaults to `CODEX_GATEWAY_CONFIG_SECRET`. |
+| `BROWSER_PREVIEW_SCHEME`      | No                | Public preview scheme, `https` by default. Use `http` only for local E2E/development.                   |
+| `BROWSER_PREVIEW_PUBLIC_PORT` | No                | Optional public port included in preview origins for local development.                                 |
 
 Create an admin user:
 
