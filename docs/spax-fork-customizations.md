@@ -1,11 +1,11 @@
-# Spax Codex Gateway fork
+# Codex Gateway Extended
 
 Last reviewed: 2026-08-31<br>
-Deployment branch: [`spax/customizations-20260824`](https://github.com/mikespax/codex-gateway/tree/spax/customizations-20260824)<br>
-Reviewed application head: [`184444f`](https://github.com/mikespax/codex-gateway/commit/184444f9da03f5a9161a38f093c9bba4ab12efd4)
+Deployment branch: [`spax/customizations-20260824`](https://github.com/mikespax/codex-gateway-extended/tree/spax/customizations-20260824)<br>
+Reviewed application head: [`184444f`](https://github.com/mikespax/codex-gateway-extended/commit/184444f9da03f5a9161a38f093c9bba4ab12efd4)
 
 This is the public inventory and maintenance guide for the deployment-specific
-changes in [`mikespax/codex-gateway`](https://github.com/mikespax/codex-gateway).
+changes in [`mikespax/codex-gateway-extended`](https://github.com/mikespax/codex-gateway-extended).
 It describes the fork without publishing credentials, private host details,
 customer data, or live production state.
 
@@ -364,7 +364,7 @@ for them.
 
 ## Public references
 
-- Fork: <https://github.com/mikespax/codex-gateway>
-- Customization branch: <https://github.com/mikespax/codex-gateway/tree/spax/customizations-20260824>
-- This inventory: <https://github.com/mikespax/codex-gateway/blob/spax/customizations-20260824/docs/spax-fork-customizations.md>
+- Fork: <https://github.com/mikespax/codex-gateway-extended>
+- Customization branch: <https://github.com/mikespax/codex-gateway-extended/tree/spax/customizations-20260824>
+- This inventory: <https://github.com/mikespax/codex-gateway-extended/blob/spax/customizations-20260824/docs/spax-fork-customizations.md>
 - Upstream: <https://github.com/yunhaoli24/codex-gateway>
