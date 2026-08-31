@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-31<br>
 Deployment branch: [`spax/customizations-20260824`](https://github.com/mikespax/codex-gateway/tree/spax/customizations-20260824)<br>
-Reviewed branch head: [`184444f`](https://github.com/mikespax/codex-gateway/commit/184444f9da03f5a9161a38f093c9bba4ab12efd4)
+Reviewed application head: [`184444f`](https://github.com/mikespax/codex-gateway/commit/184444f9da03f5a9161a38f093c9bba4ab12efd4)
 
 This is the public inventory and maintenance guide for the deployment-specific
 changes in [`mikespax/codex-gateway`](https://github.com/mikespax/codex-gateway).
@@ -260,13 +260,15 @@ not be described as deployed until merged, built, deployed, and verified.
 
 ## Upstream comparison
 
-At the reviewed head:
+The functional comparison below runs through reviewed application commit
+`184444f`. It excludes this documentation pull request and later
+documentation-only commits.
 
 ```text
 merge base with origin/main: c69d5da
 custom branch head:          184444f
 origin/main observed:        b8fc409
-fork-only commits:           34
+functional fork commits:     34
 new upstream commits:        6
 fork diff:                   128 files, +5,746 / -493 lines
 ```
