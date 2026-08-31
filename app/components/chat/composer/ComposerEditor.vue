@@ -108,6 +108,14 @@ function queueSelectionIntoView() {
   });
 }
 
+function focus() {
+  if (props.disabled) return;
+  view.value?.focus();
+  queueSelectionIntoView();
+}
+
+defineExpose({ focus });
+
 watch(
   () => props.modelValue,
   (value) => {
@@ -329,7 +337,7 @@ function selectFile(file: FileReference) {
     );
   }
   dismissMenu();
-  editor.focus();
+  focus();
 }
 
 function dismissMenu() {

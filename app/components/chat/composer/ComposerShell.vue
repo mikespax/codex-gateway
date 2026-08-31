@@ -78,6 +78,7 @@ const emit = defineEmits<{
   applyModelEffort: [selection: { model: string; effort: ReasoningEffort }];
 }>();
 
+const composerEditor = ref<InstanceType<typeof ComposerEditor> | null>(null);
 const documentUploadInput = ref<HTMLInputElement | null>(null);
 const mediaUploadInput = ref<HTMLInputElement | null>(null);
 const isDraggingFiles = ref(false);
@@ -124,6 +125,12 @@ function openAttachmentPicker(kind: "documents" | "media") {
   if (kind === "documents") documentUploadInput.value?.click();
   else mediaUploadInput.value?.click();
 }
+
+function focusEditor() {
+  composerEditor.value?.focus();
+}
+
+defineExpose({ focusEditor });
 
 function dragContainsFiles(event: DragEvent) {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
@@ -247,6 +254,7 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           Drop screenshot or file to attach
         </div>
         <ComposerEditor
+          ref="composerEditor"
           :key="composerScopeKey()"
           :model-value="modelValue"
           :references="fileReferences"

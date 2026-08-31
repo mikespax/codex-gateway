@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, onMounted, ref, watch } from "vue";
 import ComposerShell from "@/components/chat/composer/ComposerShell.vue";
 import { useComposerController } from "@/composables/composer/useComposerController";
 
@@ -56,10 +57,27 @@ const {
   uploadingAttachments,
   handleFileReferenceLimit,
 } = useComposerController();
+
+const composerShell = ref<InstanceType<typeof ComposerShell> | null>(null);
+
+function focusDesktopComposer() {
+  if (!window.matchMedia("(min-width: 48rem)").matches) return;
+  void nextTick(() => {
+    window.requestAnimationFrame(() => composerShell.value?.focusEditor());
+  });
+}
+
+watch(selectedThreadId, (threadId, previousThreadId) => {
+  if (threadId === null || threadId === previousThreadId) return;
+  focusDesktopComposer();
+});
+
+onMounted(focusDesktopComposer);
 </script>
 
 <template>
   <ComposerShell
+    ref="composerShell"
     v-model="turnText"
     v-model:file-references="fileReferences"
     :attached-files="attachedFiles"
