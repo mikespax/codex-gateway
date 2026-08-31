@@ -40,11 +40,11 @@ export function useIntermediateStepsDisclosure(input: {
       }
 
       for (const turn of input.turns.value) {
-        // Keep active intermediate work compact by default. The header shows the count and the
-        // latest action; users can expand it when they need the full live trace. Preserve an
-        // explicit open/closed choice while the turn continues streaming.
+        // A new active turn opens its intermediate work so the live trace and bottom-follow mode
+        // are visible without another click. Preserve an explicit open/closed choice while that
+        // turn continues streaming, including a reader deliberately collapsing noisy work.
         if (input.threadIsRunning.value && turn.turnIsActive) {
-          if (!openByTurnId.has(turn.id)) openByTurnId.set(turn.id, false);
+          if (!openByTurnId.has(turn.id)) openByTurnId.set(turn.id, true);
           continue;
         }
         if (input.autoCollapseIntermediate.value && !touchedByUser.has(turn.id)) {

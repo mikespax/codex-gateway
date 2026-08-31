@@ -269,7 +269,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const activeTurnId = await activeRemoteTurnId(page);
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "停止生成");
   const interruptMessageOffset = await realtimeClientMessageCount(page);
-  await page.getByTestId("send-turn-button").click();
+  await page.getByTestId("stop-turn-button").click();
   const interruptMessage = await waitForRealtimeClientMessage(
     page,
     "turn.interrupt",

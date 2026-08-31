@@ -11,6 +11,7 @@ const {
   attachedFiles,
   fileReferences,
   canInterruptTurn,
+  canStopTurn,
   canUsePrimaryAction,
   composerInputEnabled,
   deactivatePlanMode,
@@ -23,6 +24,7 @@ const {
   handleDrop,
   handlePaste,
   handlePrimaryAction,
+  interruptTurn,
   hasComposerInput,
   interruptingTurn,
   isThreadRunning,
@@ -88,6 +90,7 @@ const {
     :has-composer-input="hasComposerInput"
     :is-thread-running="isThreadRunning"
     :can-interrupt-turn="canInterruptTurn"
+    :can-stop-turn="canStopTurn"
     :can-use-primary-action="canUsePrimaryAction"
     :interrupting-turn="interruptingTurn"
     :selected-thread-status="selectedThreadStatus"
@@ -106,6 +109,7 @@ const {
     @keydown="handleComposerKeydown"
     @file-reference-limit="handleFileReferenceLimit"
     @primary-action="handlePrimaryAction"
+    @interrupt-turn="interruptTurn"
     @update-selected-approval-mode="setSelectedApprovalMode"
     @apply-model-effort="applySelectedModelEffort"
   />
