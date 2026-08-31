@@ -12,6 +12,11 @@ export function threadTurnCompletedNotification(event: GatewayEvent): ServerNoti
   const turn = threadHistoryTurnFromUnknown(params?.turn) ?? {};
   const turnId = turn.id === null || turn.id === undefined ? `event-${event.id}` : String(turn.id);
   const status = terminalTurnStatus(turn.status);
+  // A user pressing Stop still produces app-server's terminal turn/completed event, but it is not
+  // a completion that needs a push. Keep failure and ordinary completion notifications intact.
+  if (status === "interrupted") {
+    return null;
+  }
   return {
     key: `thread-terminal:${event.hostId}:${event.threadId}:turn:${turnId}:${status}`,
     title: `${threadTitle(event.hostId, event.threadId)} · Turn finished`,
