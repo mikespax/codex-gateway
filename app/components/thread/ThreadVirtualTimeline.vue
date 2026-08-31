@@ -49,12 +49,28 @@ provideFilePreviewContext({
   workspaceRoot: computed(() => props.workspaceRoot ?? null),
 });
 
-const turnStates = computed(() =>
-  props.turns.map((turn) => ({
+const turnStates = computed(() => {
+  const states = props.turns.map((turn) => ({
     turn,
     sections: buildThreadTurnSections(turn, { planModeActive: planModeActive.value }),
-  })),
-);
+  }));
+  // Reconnected history can retain stale in-progress item flags for an old turn. Only the newest
+  // active candidate may drive live spinners and elapsed timers, and only while the authoritative
+  // thread runtime is running. This prevents historical steps from counting forever.
+  let currentActiveIndex = -1;
+  if (threadIsRunning.value) {
+    states.forEach((state, index) => {
+      if (state.sections.turnIsActive) currentActiveIndex = index;
+    });
+  }
+  return states.map((state, index) => ({
+    ...state,
+    sections: {
+      ...state.sections,
+      turnIsActive: index === currentActiveIndex,
+    },
+  }));
+});
 const disclosureTurns = computed(() =>
   turnStates.value.map(({ turn, sections }) => ({
     id: turn.id,

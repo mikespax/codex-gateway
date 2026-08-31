@@ -42,6 +42,8 @@ const emit = defineEmits<{
     :user-message-variant="props.row.userMessageVariant"
     :turn-timing="props.row.turnTiming"
     :agent-actions-available="props.row.agentActionsAvailable"
+    :sent-at="props.row.sentAt"
+    :turn-is-active="props.row.turnIsActive"
   />
   <IntermediateWorkingStatus
     v-else-if="props.row.type === 'workingStatus'"

@@ -40,6 +40,8 @@ export type ThreadTimelineRow =
       userMessageVariant: "normal" | "steer";
       turnTiming: DisplayedTurnTiming | null;
       agentActionsAvailable: boolean;
+      sentAt: number | string | null;
+      turnIsActive: boolean;
     }
   | {
       key: string;
@@ -73,15 +75,15 @@ export function buildThreadTimelineRows(input: {
 }) {
   return input.turns.flatMap(({ turn, sections, intermediateOpen }) => {
     const rows: ThreadTimelineRow[] = [];
-    const timing = displayedTurnTiming(turn);
+    const timing = displayedTurnTiming(turn, sections.turnIsActive);
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
-    appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
+    appendItemRows(rows, input.threadId, turn, "user", sections.userItems, sections);
 
     const intermediateSegments = splitIntermediateSegments(sections);
     intermediateSegments.forEach((segment, segmentIndex) => {
       const isLatestSegment = segmentIndex === intermediateSegments.length - 1;
       if (segment.promptItem) {
-        appendItemRows(rows, input.threadId, turn.id, "user", [segment.promptItem], sections);
+        appendItemRows(rows, input.threadId, turn, "user", [segment.promptItem], sections);
       }
       const intermediatePresentation = presentIntermediateItems(
         segment.items,
@@ -105,7 +107,7 @@ export function buildThreadTimelineRows(input: {
         appendItemRows(
           rows,
           input.threadId,
-          turn.id,
+          turn,
           "intermediate",
           intermediatePresentation.items,
           sections,
@@ -135,7 +137,7 @@ export function buildThreadTimelineRows(input: {
     appendItemRows(
       rows,
       input.threadId,
-      turn.id,
+      turn,
       "final",
       sections.finalItems,
       sections,
@@ -277,7 +279,7 @@ function intermediateItemPreview(item: ThreadTimelineItem) {
 function appendItemRows(
   rows: ThreadTimelineRow[],
   threadId: string | null,
-  turnId: string,
+  turn: ThreadTimelineTurn,
   section: ThreadTimelineItemSection,
   items: ThreadTimelineItem[],
   sections: ThreadTurnSections,
@@ -287,24 +289,54 @@ function appendItemRows(
 ) {
   items.forEach((item, index) => {
     rows.push({
-      key: `${threadId}:turn-${turnId}:${section}:${itemKey(item, section, index)}`,
+      key: `${threadId}:turn-${turn.id}:${section}:${itemKey(item, section, index)}`,
       type: "item",
-      turnId,
+      turnId: turn.id,
       section,
       item,
       userMessageVariant: userMessageVariant(item, sections),
       turnTiming: item === timingTarget ? timing : null,
       agentActionsAvailable: item === timingTarget && agentActionsAvailable,
+      sentAt: messageTimestamp(item, turn),
+      turnIsActive: sections.turnIsActive,
     });
   });
 }
 
-function displayedTurnTiming(turn: ThreadTimelineTurn): DisplayedTurnTiming {
+function messageTimestamp(item: ThreadTimelineItem, turn: ThreadTimelineTurn) {
+  if (item.type === "userMessage") {
+    return firstTimestamp(item.createdAt, item.startedAt, turn.startedAt);
+  }
+  if (item.type === "agentMessage") {
+    return firstTimestamp(
+      item.completedAt,
+      item.createdAt,
+      turn.completedAt,
+      item.startedAt,
+      turn.startedAt,
+    );
+  }
+  return null;
+}
+
+function firstTimestamp(...values: unknown[]): number | string | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Date.parse(value))) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function displayedTurnTiming(turn: ThreadTimelineTurn, active: boolean): DisplayedTurnTiming {
+  const hasTerminalTiming = turn.completedAt != null || turn.durationMs != null;
   return {
-    startedAt: typeof turn.startedAt === "number" ? turn.startedAt : null,
+    startedAt:
+      (active || hasTerminalTiming) && typeof turn.startedAt === "number" ? turn.startedAt : null,
     completedAt: typeof turn.completedAt === "number" ? turn.completedAt : null,
     durationMs: turn.durationMs ?? null,
-    active: turn.status === "inProgress",
+    active,
   };
 }
 
@@ -338,6 +370,8 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.section === right.section &&
       left.userMessageVariant === right.userMessageVariant &&
       left.agentActionsAvailable === right.agentActionsAvailable &&
+      left.sentAt === right.sentAt &&
+      left.turnIsActive === right.turnIsActive &&
       sameTurnTiming(left.turnTiming, right.turnTiming)
     );
   }

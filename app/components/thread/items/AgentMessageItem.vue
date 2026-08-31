@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { Message, MessageContent } from "@codex-gateway/ai-elements/message";
 import MarkdownContent from "@/components/common/MarkdownContent.vue";
 import AgentMessageActions from "@/components/thread/items/AgentMessageActions.vue";
+import MessageTimestamp from "@/components/thread/MessageTimestamp.vue";
 import { isItemInProgress, threadItemText } from "@/utils/thread-items";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
 
@@ -11,6 +12,7 @@ const props = defineProps<{
   item: ThreadHistoryItem;
   turnTiming?: DisplayedTurnTiming | null;
   agentActionsAvailable?: boolean;
+  sentAt?: number | string | null;
 }>();
 
 const text = computed(() => threadItemText(props.item));
@@ -27,6 +29,11 @@ const hasFooter = computed(
       style="font-size: var(--chat-message-font-size, 0.9375rem)"
     >
       <MarkdownContent :content="text" :streaming="inProgress" />
+      <MessageTimestamp
+        v-if="props.sentAt != null && !inProgress"
+        :value="props.sentAt"
+        class="mt-3"
+      />
       <AgentMessageActions v-if="hasFooter" :text="text" :turn-timing="turnTiming" />
     </MessageContent>
   </Message>
