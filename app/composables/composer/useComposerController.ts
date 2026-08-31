@@ -99,6 +99,7 @@ export function useComposerController() {
     () =>
       selectedThreadId.value !== null && isThreadRunning.value && !submit.hasComposerInput.value,
   );
+  const canStopTurn = computed(() => selectedThreadId.value !== null && isThreadRunning.value);
   const canUsePrimaryAction = computed(() =>
     Boolean(
       (canSendTurn.value || canInterruptTurn.value) && !attachmentUpload.uploadingAttachments.value,
@@ -194,6 +195,7 @@ export function useComposerController() {
     selectedThreadTokenUsage,
     isThreadRunning,
     canInterruptTurn,
+    canStopTurn,
     canUsePrimaryAction,
     sendButtonLabel,
     slashMenuOpen: slashCommandsState.menuOpen,
@@ -203,6 +205,7 @@ export function useComposerController() {
     runSlashCommand: slashActions.runSlashCommand,
     handleComposerKeydown,
     handlePrimaryAction,
+    interruptTurn: submit.interruptTurn,
     handleFileReferenceLimit,
     models,
     loadingModels,

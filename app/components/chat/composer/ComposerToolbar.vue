@@ -43,6 +43,7 @@ defineProps<{
   hasComposerInput: boolean;
   isThreadRunning: boolean;
   canInterruptTurn: boolean;
+  canStopTurn: boolean;
   canUsePrimaryAction: boolean;
   interruptingTurn: boolean;
   selectedThreadStatus: ThreadRuntimeStatus;
@@ -52,6 +53,7 @@ defineProps<{
 const emit = defineEmits<{
   attach: [kind: "documents" | "media"];
   primaryAction: [];
+  interruptTurn: [];
   applyModelEffort: [selection: { model: string; effort: ReasoningEffort }];
   updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
 }>();
@@ -125,17 +127,31 @@ const emit = defineEmits<{
         />
       </div>
       <Button
+        v-if="isThreadRunning"
+        data-testid="stop-turn-button"
+        type="button"
+        variant="outline"
+        size="sm"
+        class="hidden shrink-0 gap-1.5 border-primary/50 text-primary hover:bg-primary/10 sm:inline-flex"
+        :aria-label="$t('app.interruptTurn')"
+        :title="$t('app.interruptTurn')"
+        :disabled="!canStopTurn || interruptingTurn"
+        @click="emit('interruptTurn')"
+      >
+        <Loader2Icon v-if="interruptingTurn" class="size-4 animate-spin" />
+        <SquareIcon v-else class="size-3.5 fill-current" />
+        <span>{{ $t("app.interruptTurn") }}</span>
+      </Button>
+      <Button
         data-testid="send-turn-button"
         class="size-11 shrink-0 rounded-full bg-primary p-0 text-primary-foreground hover:bg-primary-active"
+        :class="{ 'sm:hidden': canInterruptTurn }"
         :aria-label="sendButtonLabel"
         :disabled="!canUsePrimaryAction || interruptingTurn"
         @click="emit('primaryAction')"
       >
         <Loader2Icon v-if="uploadingAttachments" class="size-5 animate-spin" />
-        <Loader2Icon
-          v-else-if="interruptingTurn || (isThreadRunning && hasComposerInput)"
-          class="size-5 animate-spin"
-        />
+        <Loader2Icon v-else-if="interruptingTurn" class="size-5 animate-spin" />
         <SendIcon v-else-if="hasComposerInput" class="size-5" />
         <SquareIcon v-else-if="canInterruptTurn" class="size-5 fill-current" />
         <CheckIcon v-else-if="selectedThreadStatus === 'completed'" class="size-5" />

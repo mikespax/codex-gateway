@@ -49,6 +49,7 @@ const props = defineProps<{
   hasComposerInput: boolean;
   isThreadRunning: boolean;
   canInterruptTurn: boolean;
+  canStopTurn: boolean;
   canUsePrimaryAction: boolean;
   interruptingTurn: boolean;
   selectedThreadStatus: ThreadRuntimeStatus;
@@ -72,6 +73,7 @@ const emit = defineEmits<{
   keydown: [event: KeyboardEvent];
   fileReferenceLimit: [message: string];
   primaryAction: [];
+  interruptTurn: [];
   updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
   applyModelEffort: [selection: { model: string; effort: ReasoningEffort }];
 }>();
@@ -276,12 +278,14 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           :has-composer-input="hasComposerInput"
           :is-thread-running="isThreadRunning"
           :can-interrupt-turn="canInterruptTurn"
+          :can-stop-turn="canStopTurn"
           :can-use-primary-action="canUsePrimaryAction"
           :interrupting-turn="interruptingTurn"
           :selected-thread-status="selectedThreadStatus"
           :send-button-label="sendButtonLabel"
           @attach="openAttachmentPicker"
           @primary-action="emit('primaryAction')"
+          @interrupt-turn="emit('interruptTurn')"
           @update-selected-approval-mode="emit('updateSelectedApprovalMode', $event)"
           @apply-model-effort="emit('applyModelEffort', $event)"
         />

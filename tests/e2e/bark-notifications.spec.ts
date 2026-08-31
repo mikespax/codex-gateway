@@ -137,7 +137,7 @@ test("Bark does not notify when the user stops an active turn", async ({
     /Stop generation|停止生成/,
     { timeout: 30_000 },
   );
-  await page.getByTestId("send-turn-button").click();
+  await page.getByTestId("stop-turn-button").click();
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
     "aria-label",
     /Interrupted|已中断/,
