@@ -16,6 +16,7 @@ export function useWorkspaceDockLifecycle(options: {
   scopeKey: ComputedRef<string>;
   host: Readonly<Ref<HTMLElement | null>>;
   fileRequestScopeKey: ComputedRef<string | null>;
+  filesPanelOpen: ComputedRef<boolean>;
   reconcile: (api: DockviewApi) => void;
   defaultLayout: (api: DockviewApi) => SerializedDockview;
   panelIds: ComputedRef<unknown>;
@@ -144,7 +145,7 @@ export function useWorkspaceDockLifecycle(options: {
     await nextTick();
     if (!api.value) return;
     const hasAgent = Boolean(api.value.getPanel(AGENT_WORKSPACE_PANEL_ID));
-    const needsFiles = Boolean(options.fileRequestScopeKey.value);
+    const needsFiles = options.filesPanelOpen.value;
     const hasFiles = Boolean(api.value.getPanel(FILES_WORKSPACE_PANEL_ID));
     if (hasAgent && (!needsFiles || hasFiles)) {
       await restoreRequestedPanel();
@@ -181,8 +182,10 @@ export function useWorkspaceDockLifecycle(options: {
   watch(
     () => fileWorkspace.workspaceOpenRequest,
     (request) => {
-      if (request?.scopeKey === options.fileRequestScopeKey.value)
+      if (request?.scopeKey === options.fileRequestScopeKey.value) {
+        if (api.value) options.reconcile(api.value);
         activate(FILES_WORKSPACE_PANEL_ID);
+      }
     },
   );
 

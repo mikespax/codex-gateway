@@ -144,8 +144,21 @@ export function useComposerController() {
     if (slashCommandsState.handleKeydown(event)) {
       return;
     }
-    // The editor is deliberately multiline. Enter inserts a newline; sending remains an explicit
-    // toolbar action so mobile keyboards do not submit a half-written prompt.
+    // Desktop keyboard users expect Enter to submit. Preserve mobile's multiline editor so the
+    // software keyboard cannot accidentally send a half-written message; Shift+Enter is the
+    // explicit desktop newline shortcut.
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      window.matchMedia("(min-width: 48rem)").matches &&
+      canSendTurn.value
+    ) {
+      event.preventDefault();
+      void submitComposer();
+    }
   }
 
   function handlePrimaryAction() {

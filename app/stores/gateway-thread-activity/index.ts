@@ -49,8 +49,21 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     }
   }
 
-  function upsertGatewayThread(thread: GatewayThread, projects: ProjectRecord[]) {
-    upsertSummary(summaryFromGatewayThread(thread, projects));
+  function upsertGatewayThread(
+    thread: GatewayThread,
+    projects: ProjectRecord[],
+    options: { preserveActivity?: boolean } = {},
+  ) {
+    const summary = summaryFromGatewayThread(thread, projects);
+    const key = pinnedKey(summary.hostId, summary.threadId);
+    const existing = summariesByKey.value[key];
+    // Opening a chat reads its current snapshot. That is not new activity and must not reorder
+    // the Recent chats list. A real turn still calls touchThread(), while catalog/realtime
+    // updates continue to provide authoritative recency for unseen threads.
+    if (options.preserveActivity === true && existing !== undefined) {
+      summary.updatedAt = existing.updatedAt;
+    }
+    upsertSummary(summary);
   }
 
   function upsertAppServerThread(

@@ -5,6 +5,7 @@ import { computed, provide, ref, toRefs } from "vue";
 import { useTerminalTheme } from "@/composables/terminal/useTerminalTheme";
 import { useChatWorkspaceState } from "../chat-workspace-state";
 import { fileWorkspaceScopeKey } from "@/stores/file-workspace";
+import { useGatewayFileWorkspaceStore } from "@/stores/file-workspace";
 import { workspaceLayoutScopeKey } from "@/stores/gateway-workspace-layout";
 import MobileWorkspaceHeader from "../MobileWorkspaceHeader.vue";
 import { createDockTabMenu } from "./actions";
@@ -18,6 +19,7 @@ import "dockview-vue/dist/styles/dockview.css";
 const props = defineProps<WorkspaceDockProps>();
 const refs = toRefs(props);
 const workspace = useChatWorkspaceState();
+const fileWorkspace = useGatewayFileWorkspaceStore();
 const { t } = useI18n();
 const { isDark } = useTerminalTheme();
 const scopeKey = computed(() =>
@@ -40,22 +42,26 @@ const {
   selectedProjectId: workspace.selectedProjectId,
   selectedThreadId: workspace.selectedThreadId,
 });
+const fileRequestScopeKey = computed(() =>
+  workspace.selectedHostId.value && workspace.selectedThreadId.value
+    ? fileWorkspaceScopeKey(workspace.selectedHostId.value, workspace.selectedThreadId.value)
+    : null,
+);
+const filesPanelOpen = computed(
+  () => fileWorkspace.workspaceOpenRequest?.scopeKey === fileRequestScopeKey.value,
+);
 const panels = useWorkspaceDockPanels({
-  selectedThreadId: workspace.selectedThreadId,
   terminalPanels,
   subAgentPanels,
   browserPanels,
   tmuxPanels,
   hostMetricsPanel,
   gitReviewPanel,
+  filesPanelOpen,
   scopeKey,
 });
-const fileRequestScopeKey = computed(() =>
-  workspace.selectedHostId.value && workspace.selectedThreadId.value
-    ? fileWorkspaceScopeKey(workspace.selectedHostId.value, workspace.selectedThreadId.value)
-    : null,
-);
 const panelIds = computed(() => [
+  filesPanelOpen.value,
   terminalPanels.value.map(({ id }) => id),
   subAgentPanels.value.map(({ id }) => id),
   browserPanels.value.map(({ id }) => id),
@@ -68,6 +74,7 @@ const lifecycle = useWorkspaceDockLifecycle({
   scopeKey,
   host: dockviewHost,
   fileRequestScopeKey,
+  filesPanelOpen,
   reconcile: panels.reconcile,
   defaultLayout: panels.defaultLayout,
   panelIds,
