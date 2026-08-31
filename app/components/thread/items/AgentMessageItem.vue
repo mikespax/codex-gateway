@@ -23,7 +23,8 @@ const hasFooter = computed(
 <template>
   <Message from="assistant" class="min-w-0 max-w-full lg:max-w-4xl">
     <MessageContent
-      class="min-w-0 w-full gap-0 overflow-visible text-[0.9375rem] leading-8 text-ink"
+      class="min-w-0 w-full gap-0 overflow-visible leading-8 text-ink"
+      style="font-size: var(--chat-message-font-size, 0.9375rem)"
     >
       <MarkdownContent :content="text" :streaming="inProgress" />
       <AgentMessageActions v-if="hasFooter" :text="text" :turn-timing="turnTiming" />

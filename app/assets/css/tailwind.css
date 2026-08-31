@@ -323,7 +323,8 @@ kbd {
 
 @layer components {
   .markdown-content {
-    @apply min-w-0 max-w-full text-[0.9375rem] leading-8 text-inherit;
+    font-size: var(--chat-message-font-size, 0.9375rem);
+    @apply min-w-0 max-w-full leading-8 text-inherit;
   }
 
   .markdown-content > :first-child {
@@ -384,7 +385,7 @@ kbd {
   }
 
   .markdown-content pre {
-    @apply my-4 max-w-full overflow-x-auto rounded-lg bg-canvas-soft p-4 text-sm leading-6 text-ink-secondary;
+    @apply my-4 max-w-full overflow-x-auto rounded-lg bg-canvas-soft p-4 text-[0.933em] leading-6 text-ink-secondary;
   }
 
   .markdown-content pre.shiki-block {
@@ -411,7 +412,7 @@ kbd {
   }
 
   .markdown-content pre code {
-    @apply bg-transparent p-0 text-sm;
+    @apply bg-transparent p-0 text-[1em];
   }
 
   .markdown-content pre.language-diff {
@@ -451,7 +452,7 @@ kbd {
   }
 
   .markdown-content table {
-    @apply my-4 block w-max max-w-full overflow-x-auto border-collapse text-sm;
+    @apply my-4 block w-max max-w-full overflow-x-auto border-collapse text-[0.933em];
   }
 
   .markdown-content th,

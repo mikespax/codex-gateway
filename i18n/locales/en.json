@@ -117,6 +117,8 @@
     "openFileTree": "Open file tree",
     "closeTab": "Close tab",
     "openTerminal": "Open terminal",
+    "decreaseChatTextSize": "Decrease chat text size",
+    "increaseChatTextSize": "Increase chat text size",
     "openBrowser": "Open browser",
     "openTmuxMonitor": "Open Tmux monitors",
     "openHostMonitor": "Open host monitor",

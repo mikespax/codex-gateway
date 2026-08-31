@@ -117,6 +117,8 @@
     "openFileTree": "打开文件树",
     "closeTab": "关闭标签页",
     "openTerminal": "打开终端",
+    "decreaseChatTextSize": "减小聊天文字",
+    "increaseChatTextSize": "增大聊天文字",
     "openBrowser": "打开浏览器",
     "openTmuxMonitor": "打开 Tmux 监控",
     "openHostMonitor": "打开主机监控",

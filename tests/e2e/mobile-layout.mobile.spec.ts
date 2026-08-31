@@ -81,6 +81,85 @@ test("uses the mobile layout with hidden sidebar and usable composer shell", asy
   await expect(page.getByTestId("chat-scroll-area")).toBeVisible();
   await expect(page.getByTestId("codex-usage-badge")).toHaveText("73%");
   await expect(page.getByTestId("codex-usage-badge")).toHaveAttribute("aria-label", /73%/);
+  await expect(page.getByTestId("decrease-chat-text-size")).toBeVisible();
+  await expect(page.getByTestId("increase-chat-text-size")).toBeVisible();
+  await expect(page.getByTestId("open-tmux-mobile-button")).toHaveCount(0);
+  await expect(page.getByTestId("open-host-monitor-mobile-button")).toHaveCount(0);
+  await expect(page.getByTestId("open-browser-mobile-button")).toHaveCount(0);
+  await expect(page.getByTestId("open-terminal-mobile-button")).toHaveCount(0);
+
+  const titleBox = await page.getByTestId("mobile-thread-title").boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(titleBox!.width).toBeGreaterThan(120);
+});
+
+test("persists chat-only text size controls in the mobile header", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-chat-text-size";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile chat text size" },
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "mobile-chat-text-size-turn",
+            status: "completed",
+            items: [
+              {
+                id: "mobile-chat-text-size-user",
+                type: "userMessage",
+                content: [{ type: "text", text: "Keep the composer size unchanged." }],
+              },
+              {
+                id: "mobile-chat-text-size-agent",
+                type: "agentMessage",
+                phase: "final_answer",
+                text: "Increase only the conversation text.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  const timeline = page.getByTestId("chat-scroll-area");
+  const conversationText = timeline.locator(".markdown-content").last();
+  const composer = page.getByTestId("composer-input");
+  await expect(timeline).toHaveAttribute("data-chat-text-size", "default");
+  await expect(conversationText).toBeVisible();
+
+  const initialConversationSize = await conversationText.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  const initialComposerSize = await composer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+
+  await page.getByTestId("increase-chat-text-size").click();
+  await expect(timeline).toHaveAttribute("data-chat-text-size", "large");
+
+  const increasedConversationSize = await conversationText.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  const unchangedComposerSize = await composer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  expect(increasedConversationSize).toBeGreaterThan(initialConversationSize);
+  expect(unchangedComposerSize).toBe(initialComposerSize);
+
+  const storageState = await page.context().storageState();
+  const persistedPreferences = storageState.origins
+    .flatMap((origin) => origin.localStorage)
+    .filter(({ name }) => name.endsWith(":chat-text-size"))
+    .map(({ value }) => value);
+  expect(persistedPreferences).toContain("large");
+
+  await page.getByTestId("decrease-chat-text-size").click();
+  await expect(timeline).toHaveAttribute("data-chat-text-size", "default");
 });
 
 test("expands the focused composer in a keyboard-sized mobile viewport", async ({ page }) => {
@@ -853,14 +932,6 @@ test("opens sidebar context actions with long press on mobile", async ({
   await page.getByTestId("mobile-sidebar-toggle").click();
   await page.getByTestId(`project-button-${project.id}`).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  await expect(page.getByTestId("open-tmux-mobile-button")).toBeVisible();
-  await expect(page.getByTestId("open-host-monitor-mobile-button")).toBeVisible();
-  await page.getByTestId("open-host-monitor-mobile-button").click();
-  await expect(page.getByTestId("host-metrics-panel")).toBeVisible();
-  await page.getByRole("tab", { name: /Agent/ }).click();
-  await page.getByTestId("open-terminal-mobile-button").click();
-  await expect(page.getByTestId("terminal-panel")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("tab", { name: /Agent/ }).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
   const threadButton = page.getByTestId(`project-thread-row-${threadId}`);
   await expect(threadButton).toBeVisible({ timeout: 30_000 });
