@@ -39,3 +39,8 @@ android/**/*.jks
 android/**/*.keystore
 android/app/google-services.json
 secrets/firebase-service-account*.json
+
+# Local release overlays, preservation patches, and public SSH key copies
+docker-compose.override.yml
+local-patches/
+secrets/*.pub
