@@ -21,6 +21,8 @@ const props = withDefaults(
 <template>
   <a
     :href="href"
+    target="_blank"
+    rel="noopener noreferrer"
     data-slot="pagination-link"
     :data-active="isActive ? '' : undefined"
     :aria-current="isActive ? 'page' : undefined"

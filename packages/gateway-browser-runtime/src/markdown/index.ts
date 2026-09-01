@@ -24,6 +24,20 @@ export function createMarkdownRenderer(): MarkdownRenderer {
     breaks: false,
   });
 
+  // Markdown is rendered into the live Gateway document with `v-html`. Keep
+  // ordinary links from navigating the current chat away: opening a new
+  // browsing context preserves the active thread, composer state, and any
+  // in-progress work in the original tab. `noopener` also prevents the new
+  // page from gaining a reference to the Gateway window.
+  markdown.renderer.rules.link_open = (tokens, index, options, environment, self) => {
+    const token = tokens[index];
+    if (token !== undefined) {
+      token.attrSet("target", "_blank");
+      token.attrSet("rel", "noopener noreferrer");
+    }
+    return self.renderToken(tokens, index, options);
+  };
+
   markdown.use(katex, {
     delimiters: "all",
     throwOnError: false,

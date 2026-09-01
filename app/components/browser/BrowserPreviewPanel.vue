@@ -108,6 +108,7 @@ async function toggleInsecureTls() {
         as="a"
         :href="previewTargetUrl(session)"
         target="_blank"
+        rel="noopener noreferrer"
         :tooltip="$t('app.openExternally')"
       >
         <ExternalLinkIcon class="size-4" />
@@ -119,7 +120,13 @@ async function toggleInsecureTls() {
     >
       <ShieldAlertIcon class="size-4 shrink-0" />
       <span class="min-w-0 flex-1 truncate">{{ $t("app.browserFrameBlocked") }}</span>
-      <a v-if="session" :href="session.previewOrigin" target="_blank" class="font-medium underline">
+      <a
+        v-if="session"
+        :href="session.previewOrigin"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="font-medium underline"
+      >
         {{ $t("app.openExternally") }}
       </a>
     </div>

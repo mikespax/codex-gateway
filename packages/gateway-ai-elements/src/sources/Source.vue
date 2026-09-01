@@ -14,7 +14,7 @@ const props = defineProps<{
   <a
     :class="cn('flex items-center gap-2', props.class)"
     :href="props.href"
-    rel="noreferrer"
+    rel="noopener noreferrer"
     target="_blank"
   >
     <!-- Default slot content -->
