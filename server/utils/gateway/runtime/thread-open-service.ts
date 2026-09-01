@@ -5,6 +5,7 @@ import { projectThreadTimelineHistory } from "~~/shared/thread-history/timeline"
 import {
   runtimeStatusFromSnapshotState,
   runtimeStatusFromThreadState,
+  runtimeStatusFromTopLevelThreadState,
 } from "~~/shared/thread-runtime-status";
 import {
   extractThreadSettings,
@@ -47,7 +48,7 @@ export class ThreadOpenService {
   ) {
     const cachedSnapshot =
       threadSnapshotStore.get(host.id, threadId) ??
-      this.restoreVerifiedPersistentSnapshot(host.id, threadId);
+      (await this.restoreVerifiedPersistentSnapshot(host, threadId, projectId));
     if (cachedSnapshot) {
       if (snapshotSatisfiesTurnLimit(cachedSnapshot, limit)) {
         // Runtime notifications are projected into this snapshot as they arrive, including the
@@ -90,26 +91,71 @@ export class ThreadOpenService {
     );
   }
 
-  private restoreVerifiedPersistentSnapshot(hostId: number, threadId: string) {
-    const snapshot = threadSnapshotStore.restorePersistent(hostId, threadId);
+  private async restoreVerifiedPersistentSnapshot(
+    host: HostRecord,
+    threadId: string,
+    projectId: number | null,
+  ) {
+    const snapshot = threadSnapshotStore.restorePersistent(host.id, threadId);
     if (snapshot === null) return null;
-    const metadata = threadMetadataStore.get(hostId, threadId);
-    const status = runtimeStatusFromSnapshotState(snapshot.thread, snapshot.history);
-    if (
-      metadata === null ||
-      metadata.updatedAt !== snapshot.thread.updatedAt ||
-      status === "running"
-    ) {
-      threadSnapshotStore.deletePersistent(hostId, threadId);
+
+    let authoritativeThread: AppServerThread;
+    try {
+      // The in-memory metadata index is intentionally not durable. After a Gateway restart the
+      // persistent snapshot must be checked against the app-server's current identity/version
+      // before it can be rendered, but a metadata-only read avoids replaying the full history.
+      const client = await this.registry.getHostClient(host);
+      authoritativeThread = (
+        await client.request(
+          "thread/read",
+          { threadId, includeTurns: false },
+          120_000,
+          parseThreadReadResult,
+        )
+      ).thread;
+    } catch (error) {
+      // Keep the durable entry on transport, timeout, or parse errors. It may still be valid;
+      // the normal authoritative refresh below will report the actual failure or recover it.
+      runtimeLog("persistent thread cache validation failed", {
+        hostId: host.id,
+        threadId,
+        message: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
-    threadSnapshotStore.hydratePersistent(hostId, threadId, snapshot);
+
+    const status = runtimeStatusFromTopLevelThreadState(authoritativeThread);
+    if (
+      authoritativeThread.id !== threadId ||
+      authoritativeThread.updatedAt !== snapshot.thread.updatedAt ||
+      status === "running"
+    ) {
+      threadSnapshotStore.deletePersistent(host.id, threadId);
+      runtimeLog("persistent thread cache rejected", {
+        hostId: host.id,
+        threadId,
+        cachedUpdatedAt: snapshot.thread.updatedAt,
+        authoritativeUpdatedAt: authoritativeThread.updatedAt,
+        authoritativeStatus: status,
+      });
+      return null;
+    }
+
+    // Seed both volatile indexes from the authoritative metadata. Keep the cached history and
+    // cursors, while adopting any newer non-history fields from thread/read (which intentionally
+    // omits the turns payload).
+    const verifiedSnapshot =
+      authoritativeThread === snapshot.thread
+        ? snapshot
+        : { ...snapshot, thread: authoritativeThread };
+    threadMetadataStore.record(host.id, projectId ?? snapshot.projectId, authoritativeThread);
+    threadSnapshotStore.hydratePersistent(host.id, threadId, verifiedSnapshot);
     runtimeLog("persistent thread cache hit", {
-      hostId,
+      hostId: host.id,
       threadId,
-      updatedAt: snapshot.thread.updatedAt,
+      updatedAt: verifiedSnapshot.thread.updatedAt,
     });
-    return snapshot;
+    return verifiedSnapshot;
   }
 
   startedThreadResult(host: HostRecord, projectId: number | null, rawResult: unknown) {
