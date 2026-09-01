@@ -5,7 +5,7 @@ import { requireRecord } from "../../../utils/gateway/http/validation/common";
 import { hostStore } from "../../../utils/gateway/state/hosts";
 import { gatewayEventStore } from "../../../utils/gateway/state/gateway-events";
 
-export default defineSupervisorEventHandler(async (event, grant) => {
+export default defineSupervisorEventHandler("thread.events.read", async (event, grant) => {
   const query = await getValidatedQuery(event, (value) =>
     supervisorThreadEventsSchema.parse(value),
   );
@@ -23,6 +23,9 @@ export default defineSupervisorEventHandler(async (event, grant) => {
       hostId: grant.hostId,
       projectId: grant.projectId,
       threadId: grant.threadId,
+      permissions: grant.permissions,
+      persistent: grant.persistent,
+      expiresAt: grant.expiresAt,
     },
     observedAt: new Date().toISOString(),
     eventEpoch,

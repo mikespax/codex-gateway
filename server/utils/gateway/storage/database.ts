@@ -200,4 +200,44 @@ function migrate(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_supervisor_grants_expiry
       ON supervisor_grants(user_id, expires_at);
   `);
+
+  ensureSupervisorGrantColumns(db);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS supervisor_message_requests (
+      grant_id TEXT NOT NULL REFERENCES supervisor_grants(id) ON DELETE CASCADE,
+      client_message_id TEXT NOT NULL,
+      text_sha256 TEXT NOT NULL,
+      text_length INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('processing', 'accepted', 'failed')),
+      turn_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (grant_id, client_message_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_supervisor_message_requests_status
+      ON supervisor_message_requests(grant_id, status, updated_at);
+  `);
+}
+
+function ensureSupervisorGrantColumns(db: DatabaseSync) {
+  const columns = new Set(
+    db
+      .prepare("PRAGMA table_info(supervisor_grants)")
+      .all()
+      .map((row) => String(row.name)),
+  );
+  if (!columns.has("permissions_json")) {
+    db.exec(`
+      ALTER TABLE supervisor_grants
+      ADD COLUMN permissions_json TEXT NOT NULL
+      DEFAULT '["thread.history.read","thread.events.read"]'
+    `);
+  }
+  if (!columns.has("is_persistent")) {
+    db.exec(`
+      ALTER TABLE supervisor_grants
+      ADD COLUMN is_persistent INTEGER NOT NULL DEFAULT 0
+    `);
+  }
 }

@@ -6,6 +6,7 @@ const PUBLIC_API_PATHS = new Set([
   "/api/realtime",
   "/api/supervisor/thread",
   "/api/supervisor/thread/events",
+  "/api/supervisor/thread/message",
   "/api/android/device/revoke",
   "/api/android/device/reply",
   "/api/android/device/token",

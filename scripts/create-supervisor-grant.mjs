@@ -8,8 +8,10 @@ const args = parseArgs(process.argv.slice(2));
 const username = required(args, "username").trim().toLowerCase();
 const title = required(args, "title").trim();
 const outputPath = resolve(required(args, "output"));
-const hours = positiveNumber(args.hours ?? "24", "hours");
-if (hours > 168) fail("Supervisor grants may not exceed 168 hours");
+const persistent = booleanValue(args.persistent ?? "false", "persistent");
+const allowSend = booleanValue(args["allow-send"] ?? "false", "allow-send");
+const hours = persistent ? null : positiveNumber(args.hours ?? "24", "hours");
+if (hours !== null && hours > 168) fail("Expiring supervisor grants may not exceed 168 hours");
 if (existsSync(outputPath)) fail(`Refusing to overwrite existing token file: ${outputPath}`);
 
 const dbPath = resolve(process.env.CODEX_GATEWAY_DB_PATH || "/data/codex-gateway.db");
@@ -47,13 +49,21 @@ if (host === undefined) fail(`Pinned thread host ${pinned.hostId} is not configu
 const token = `sg_${randomBytes(32).toString("base64url")}`;
 const grantId = randomUUID();
 const createdAt = new Date().toISOString();
-const expiresAt = new Date(Date.now() + hours * 3_600_000).toISOString();
+const expiresAt =
+  hours === null
+    ? "9999-12-31T23:59:59.999Z"
+    : new Date(Date.now() + hours * 3_600_000).toISOString();
+const permissions = [
+  "thread.history.read",
+  "thread.events.read",
+  ...(allowSend ? ["thread.projectManagement.send"] : []),
+];
 db.prepare(
   `
     INSERT INTO supervisor_grants
       (id, user_id, token_hash, host_id, project_id, thread_id, label,
-       expires_at, revoked_at, created_at, last_used_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)
+       permissions_json, is_persistent, expires_at, revoked_at, created_at, last_used_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)
   `,
 ).run(
   grantId,
@@ -63,6 +73,8 @@ db.prepare(
   pinned.projectId === null ? null : Number(pinned.projectId),
   String(pinned.threadId),
   title,
+  JSON.stringify(permissions),
+  persistent ? 1 : 0,
   expiresAt,
   createdAt,
 );
@@ -85,8 +97,9 @@ console.log(
       projectId: pinned.projectId === null ? null : Number(pinned.projectId),
       threadId: String(pinned.threadId),
       title,
-      permissions: ["thread.history.read", "thread.events.read"],
-      expiresAt,
+      permissions,
+      persistent,
+      expiresAt: persistent ? null : expiresAt,
       tokenFile: outputPath,
     },
     null,
@@ -130,6 +143,25 @@ function ensureGrantTable(database) {
     CREATE INDEX IF NOT EXISTS idx_supervisor_grants_expiry
       ON supervisor_grants(user_id, expires_at);
   `);
+  const columns = new Set(
+    database
+      .prepare("PRAGMA table_info(supervisor_grants)")
+      .all()
+      .map((row) => String(row.name)),
+  );
+  if (!columns.has("permissions_json")) {
+    database.exec(`
+      ALTER TABLE supervisor_grants
+      ADD COLUMN permissions_json TEXT NOT NULL
+      DEFAULT '["thread.history.read","thread.events.read"]'
+    `);
+  }
+  if (!columns.has("is_persistent")) {
+    database.exec(`
+      ALTER TABLE supervisor_grants
+      ADD COLUMN is_persistent INTEGER NOT NULL DEFAULT 0
+    `);
+  }
 }
 
 function parseArgs(values) {
@@ -153,6 +185,12 @@ function positiveNumber(value, key) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) fail(`--${key} must be a positive number`);
   return number;
+}
+
+function booleanValue(value, key) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  fail(`--${key} must be true or false`);
 }
 
 function fail(message) {

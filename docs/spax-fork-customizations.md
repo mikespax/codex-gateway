@@ -209,17 +209,31 @@ Primary commit: `184444f`.
 
 Primary commits: `ae84860`, `97ce85f`.
 
-### 11. Scoped read-only thread supervision
+### 11. Scoped thread supervision
 
 - A supervisor grant targets one immutable account/host/project/thread tuple.
 - Its bearer token is stored only as a hash and can expire or be revoked.
 - The grant exposes bounded history and an event stream for that thread.
-- Supervisor credentials cannot use normal Gateway APIs or mutate a turn.
+- Grants are permission-scoped. Existing grants remain read-only by default.
+- A persistent grant can additionally receive `thread.projectManagement.send`; it remains valid
+  until explicitly revoked and can only start a plain-text turn on its immutable thread.
+- Project-management sends are rejected while the thread is running, accept no target ID,
+  attachments, model, approval, collaboration, settings, interrupt, browser, terminal, or file
+  parameters, and use an idempotent client message ID.
+- Send auditing stores only the grant ID, client message ID, text hash/length, status, timestamps,
+  and resulting turn ID. Message text is not copied into the Gateway database.
+- Supervisor credentials cannot use normal Gateway APIs, other threads, settings, interrupts, or
+  deletion routes.
 - Helper scripts create, inspect, and revoke grants without giving automation a
   general-purpose account credential.
 
-This is an integration boundary for read-only monitoring, not a second
-conversation authority.
+Create an expiring read-only grant with the existing command. To create a persistent grant with
+project-management sends, add `--persistent true --allow-send true`. Use
+`pnpm supervisor:send --token-file <path> --stdin true` to submit a message without placing it in
+the process argument list. Revocation continues to use `pnpm supervisor:revoke`.
+
+This is a narrow coordination boundary, not a general-purpose Gateway account or customer-send
+authority.
 
 Primary commit: `fbd79bc`.
 

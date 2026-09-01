@@ -1,6 +1,14 @@
 import { gatewayDatabase } from "../storage/database";
 import { hashToken } from "../storage/crypto";
 
+export const SUPERVISOR_PERMISSIONS = [
+  "thread.history.read",
+  "thread.events.read",
+  "thread.projectManagement.send",
+] as const;
+
+export type SupervisorPermission = (typeof SUPERVISOR_PERMISSIONS)[number];
+
 export interface SupervisorGrant {
   id: string;
   userId: number;
@@ -9,7 +17,9 @@ export interface SupervisorGrant {
   projectId: number | null;
   threadId: string;
   label: string;
-  expiresAt: string;
+  permissions: SupervisorPermission[];
+  persistent: boolean;
+  expiresAt: string | null;
 }
 
 export const supervisorGrantStore = {
@@ -24,6 +34,8 @@ export const supervisorGrantStore = {
                  supervisor_grants.project_id,
                  supervisor_grants.thread_id,
                  supervisor_grants.label,
+                 supervisor_grants.permissions_json,
+                 supervisor_grants.is_persistent,
                  supervisor_grants.expires_at,
                  users.username,
                  users.is_active
@@ -35,7 +47,10 @@ export const supervisorGrantStore = {
       )
       .get(hashToken(token));
     if (row === undefined || Number(row.is_active) !== 1) return null;
-    if (Date.parse(String(row.expires_at)) <= Date.now()) return null;
+    const persistent = Number(row.is_persistent) === 1;
+    if (!persistent && Date.parse(String(row.expires_at)) <= Date.now()) return null;
+    const permissions = parsePermissions(row.permissions_json);
+    if (permissions.length === 0) return null;
 
     const now = new Date().toISOString();
     gatewayDatabase()
@@ -49,7 +64,39 @@ export const supervisorGrantStore = {
       projectId: row.project_id === null ? null : Number(row.project_id),
       threadId: String(row.thread_id),
       label: String(row.label),
-      expiresAt: String(row.expires_at),
+      permissions,
+      persistent,
+      expiresAt: persistent ? null : String(row.expires_at),
     };
   },
 };
+
+export function hasSupervisorPermission(grant: SupervisorGrant, permission: SupervisorPermission) {
+  return grant.permissions.includes(permission);
+}
+
+function parsePermissions(value: unknown): SupervisorPermission[] {
+  try {
+    const parsed: unknown = JSON.parse(String(value));
+    if (!Array.isArray(parsed)) return [];
+    const permissions = new Set<SupervisorPermission>();
+    for (const permission of parsed) {
+      if (typeof permission === "string" && isSupervisorPermission(permission)) {
+        permissions.add(permission);
+      }
+    }
+    return [...permissions].sort(
+      (left, right) => SUPERVISOR_PERMISSIONS.indexOf(left) - SUPERVISOR_PERMISSIONS.indexOf(right),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function isSupervisorPermission(value: string): value is SupervisorPermission {
+  return (
+    value === "thread.history.read" ||
+    value === "thread.events.read" ||
+    value === "thread.projectManagement.send"
+  );
+}

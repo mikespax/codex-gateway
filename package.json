@@ -18,6 +18,7 @@
     "supervisor:grant": "node scripts/create-supervisor-grant.mjs",
     "supervisor:revoke": "node scripts/revoke-supervisor-grant.mjs",
     "supervisor:read": "node scripts/read-supervisor-thread.mjs",
+    "supervisor:send": "node scripts/send-supervisor-message.mjs",
     "test:e2e": "tests/e2e/run-in-containers.sh",
     "postinstall": "pnpm build:dependencies && pnpm typecheck:dependencies && nuxt prepare"
   },

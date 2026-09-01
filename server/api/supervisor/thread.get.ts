@@ -7,7 +7,7 @@ import { hostStore } from "../../utils/gateway/state/hosts";
 import { projectStore } from "../../utils/gateway/state/projects";
 import { gatewayMemoryState } from "../../utils/gateway/state/memory";
 
-export default defineSupervisorEventHandler(async (event, grant) => {
+export default defineSupervisorEventHandler("thread.history.read", async (event, grant) => {
   const query = await getValidatedQuery(event, (value) => supervisorThreadReadSchema.parse(value));
   const host = requireRecord(hostStore.getWithSecret(grant.hostId), "Host not found");
   const page = await threadBroker.listThreadTurns(host, grant.threadId, {
@@ -24,13 +24,14 @@ export default defineSupervisorEventHandler(async (event, grant) => {
       grantId: grant.id,
       label: grant.label,
       expiresAt: grant.expiresAt,
+      persistent: grant.persistent,
       hostId: grant.hostId,
       hostName: host.name,
       projectId: grant.projectId,
       projectName: project?.name ?? pinned?.projectName ?? null,
       threadId: grant.threadId,
       threadTitle: pinned?.title ?? grant.label,
-      permissions: ["thread.history.read", "thread.events.read"] as const,
+      permissions: grant.permissions,
     },
     observedAt: new Date().toISOString(),
     ...page,

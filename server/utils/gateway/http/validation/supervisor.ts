@@ -11,3 +11,10 @@ export const supervisorThreadEventsSchema = z.object({
   afterEpoch: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
 });
+
+export const supervisorThreadMessageSchema = z
+  .object({
+    text: z.string().trim().min(1).max(8_000),
+    clientMessageId: z.uuid(),
+  })
+  .strict();
