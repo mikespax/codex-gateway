@@ -7,6 +7,7 @@ import { Button } from "@codex-gateway/ui/button";
 import { useOpenSubAgentPanel } from "@/composables/thread/useOpenSubAgentPanel";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity";
+import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { pinnedKey } from "@/stores/gateway/thread-utils/identity";
 import { activeSubAgentsFromTurns } from "./active-subagents";
 import { subAgentDisplayName } from "./display-name";
@@ -20,8 +21,19 @@ const props = defineProps<{
 const { t } = useI18n();
 const threadView = useGatewayThreadViewStore();
 const threadActivity = useGatewayThreadActivityStore();
+const threadRuntime = useGatewayThreadRuntimeStore();
 const { openSubAgentPanel } = useOpenSubAgentPanel();
-const agents = computed(() => activeSubAgentsFromTurns(props.turns));
+const agents = computed(() => {
+  const runtimeStatuses =
+    props.hostId === null
+      ? {}
+      : Object.fromEntries(
+          Object.entries(threadRuntime.threadStatuses)
+            .filter(([key]) => key.startsWith(`${props.hostId}:`))
+            .map(([key, status]) => [key.slice(`${props.hostId}:`.length), status]),
+        );
+  return activeSubAgentsFromTurns(props.turns, runtimeStatuses);
+});
 useActiveSubAgentMetadata(() => props.hostId, agents);
 
 function displayName(agent: (typeof agents.value)[number]) {

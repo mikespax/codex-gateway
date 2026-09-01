@@ -1,4 +1,4 @@
-import type { ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
+import type { ThreadRuntimeStatus, ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import { recordFromUnknown } from "~~/shared/utils/records";
 import { firstNonEmptyString, trimmedOrNull } from "~~/shared/utils/strings";
 
@@ -10,7 +10,10 @@ export interface ActiveSubAgent {
   status: string;
 }
 
-export function activeSubAgentsFromTurns(turns: ThreadTimelineTurn[]): ActiveSubAgent[] {
+export function activeSubAgentsFromTurns(
+  turns: ThreadTimelineTurn[],
+  runtimeStatuses: Readonly<Record<string, ThreadRuntimeStatus>> = {},
+): ActiveSubAgent[] {
   const agents = new Map<string, ActiveSubAgent>();
   // Activity items provide the stable thread/path identity, while collab tool
   // state is app-server's latest lifecycle snapshot. Fold both chronologically;
@@ -21,7 +24,12 @@ export function activeSubAgentsFromTurns(turns: ThreadTimelineTurn[]): ActiveSub
       if (item?.type === "collabAgentToolCall") applyCollabState(agents, item);
     }
   }
-  return [...agents.values()];
+  return [...agents.values()].filter((agent) => {
+    const runtimeStatus = runtimeStatuses[agent.threadId];
+    // A known app-server runtime status is authoritative over stale parent history. Keep the
+    // history fallback only for children whose runtime status has not reached this page yet.
+    return runtimeStatus === undefined || runtimeStatus === "running";
+  });
 }
 
 function applyActivity(agents: Map<string, ActiveSubAgent>, item: ThreadTimelineItem) {
