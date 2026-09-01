@@ -179,6 +179,9 @@ importers:
       h3:
         specifier: 1.15.11
         version: 1.15.11(srvx@0.11.22)
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
       isbinaryfile:
         specifier: ^6.0.0
         version: 6.0.0
@@ -4858,6 +4861,9 @@ packages:
     peerDependenciesMeta:
       crossws:
         optional: true
+
+  idb@8.0.3:
+    resolution: {integrity: sha512-LtwtVyVYO5BqRvcsKuB2iUMnHwPVByPCXFXOpuU96IZPPoPN6xjOGxZQ74pgSVVLQWtUOYgyeL4GE98BY5D3wg==}
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -12205,6 +12211,8 @@ snapshots:
       srvx: 0.12.4
     optionalDependencies:
       crossws: 0.4.7(srvx@0.11.22)
+
+  idb@8.0.3: {}
 
   hachure-fill@0.5.2: {}
 

@@ -182,6 +182,20 @@ function migrate(db: DatabaseSync) {
       last_used_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS thread_snapshot_cache (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      host_id INTEGER NOT NULL,
+      thread_id TEXT NOT NULL,
+      source_updated_at INTEGER NOT NULL,
+      turn_count INTEGER NOT NULL,
+      encrypted_snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_accessed_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, host_id, thread_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_tmux_monitors_host
@@ -199,6 +213,10 @@ function migrate(db: DatabaseSync) {
       ON supervisor_grants(token_hash);
     CREATE INDEX IF NOT EXISTS idx_supervisor_grants_expiry
       ON supervisor_grants(user_id, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_thread_snapshot_cache_lru
+      ON thread_snapshot_cache(user_id, last_accessed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_thread_snapshot_cache_expiry
+      ON thread_snapshot_cache(expires_at);
   `);
 
   ensureSupervisorGrantColumns(db);

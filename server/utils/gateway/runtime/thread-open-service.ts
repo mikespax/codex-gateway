@@ -45,7 +45,9 @@ export class ThreadOpenService {
     activationController?: ThreadController,
     projectCwd?: string | null,
   ) {
-    const cachedSnapshot = threadSnapshotStore.get(host.id, threadId);
+    const cachedSnapshot =
+      threadSnapshotStore.get(host.id, threadId) ??
+      this.restoreVerifiedPersistentSnapshot(host.id, threadId);
     if (cachedSnapshot) {
       if (snapshotSatisfiesTurnLimit(cachedSnapshot, limit)) {
         // Runtime notifications are projected into this snapshot as they arrive, including the
@@ -86,6 +88,28 @@ export class ThreadOpenService {
       activationController,
       projectCwd,
     );
+  }
+
+  private restoreVerifiedPersistentSnapshot(hostId: number, threadId: string) {
+    const snapshot = threadSnapshotStore.restorePersistent(hostId, threadId);
+    if (snapshot === null) return null;
+    const metadata = threadMetadataStore.get(hostId, threadId);
+    const status = runtimeStatusFromSnapshotState(snapshot.thread, snapshot.history);
+    if (
+      metadata === null ||
+      metadata.updatedAt !== snapshot.thread.updatedAt ||
+      status === "running"
+    ) {
+      threadSnapshotStore.deletePersistent(hostId, threadId);
+      return null;
+    }
+    threadSnapshotStore.hydratePersistent(hostId, threadId, snapshot);
+    runtimeLog("persistent thread cache hit", {
+      hostId,
+      threadId,
+      updatedAt: snapshot.thread.updatedAt,
+    });
+    return snapshot;
   }
 
   startedThreadResult(host: HostRecord, projectId: number | null, rawResult: unknown) {

@@ -29,6 +29,7 @@ import {
   syncSelectedRoute,
 } from "@/stores/gateway/thread-open/view-state";
 import { patchThreadView, upsertThreadView } from "@/stores/gateway/thread-open/thread-view-cache";
+import { readPersistentThreadView } from "@/stores/gateway/thread-open/persistent-thread-view-cache";
 import { clearThreadCompletionAttention } from "@/stores/gateway/thread-runtime/completion-attention";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 
@@ -102,6 +103,36 @@ export function createThreadOpenActions() {
         void syncOpenThreadFromServer({
           hostId: targetHostId,
           projectId: targetProjectId,
+          threadId,
+          viewEpoch,
+          replaceRoute: context?.replaceRoute,
+          showLoading: false,
+          scrollToLatest: false,
+          limit: cachedTurnLimit,
+        });
+        return;
+      }
+      const sessionIsCurrent = captureSessionEpoch();
+      const persistentView = await readPersistentThreadView(targetHostId, threadId);
+      if (
+        persistentView !== null &&
+        sessionIsCurrent() &&
+        isCurrentViewTransition(viewEpoch) &&
+        navigation.selectedHostId === targetHostId &&
+        navigation.selectedThreadId === threadId
+      ) {
+        upsertThreadView(persistentView);
+        restoreThreadView(targetHostId, threadId);
+        const cachedTurnLimit = Math.max(
+          INITIAL_TURN_PAGE_LIMIT,
+          threadTurnsFromHistory(persistentView.history).length,
+        );
+        rememberOpenThread(threadId);
+        syncSelectedRoute({ replace: context?.replaceRoute });
+        requestScrollToLatest();
+        void syncOpenThreadFromServer({
+          hostId: targetHostId,
+          projectId: persistentView.projectId ?? targetProjectId,
           threadId,
           viewEpoch,
           replaceRoute: context?.replaceRoute,

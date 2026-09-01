@@ -78,6 +78,7 @@
     "ensure-error": "^5.0.0",
     "fuse.js": "^7.5.0",
     "h3": "1.15.11",
+    "idb": "^8.0.3",
     "isbinaryfile": "^6.0.0",
     "klona": "^2.0.6",
     "media-chrome": "^4.19.2",

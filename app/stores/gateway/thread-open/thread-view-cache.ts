@@ -5,6 +5,7 @@ import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { pinnedKey } from "../thread-utils/identity";
 import type { ThreadViewState } from "../types";
+import { persistThreadViewSoon } from "./persistent-thread-view-cache";
 import { threadViewSubscriptionLeases } from "./thread-view-subscription-leases";
 
 export function threadViewKey(hostId: number, threadId: string) {
@@ -29,6 +30,7 @@ export function upsertThreadView(view: ThreadViewState) {
   const key = threadViewKey(view.hostId, view.threadId);
   const { [key]: _existing, ...remaining } = views.threadViews;
   views.threadViews = pruneThreadViews({ ...remaining, [key]: view });
+  persistThreadViewSoon(view);
 }
 
 function pruneThreadViews(threadViews: Record<string, ThreadViewState>) {
