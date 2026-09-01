@@ -32,7 +32,12 @@ printf 'Working tree: clean\n'
 
 if [[ "$build_image" == 1 ]]; then
   docker compose build --build-arg "BUILD_SHA=$commit" codex-gateway
-  image_id="$(docker compose images -q codex-gateway)"
+  mapfile -t image_refs < <(docker compose config --images | sed '/^$/d')
+  if [[ "${#image_refs[@]}" -ne 1 ]]; then
+    printf 'Expected exactly one configured Gateway image, found %s.\n' "${#image_refs[@]}" >&2
+    exit 1
+  fi
+  image_id="$(docker image inspect "${image_refs[0]}" --format '{{.Id}}' 2>/dev/null || true)"
   if [[ -z "$image_id" ]]; then
     printf 'Unable to identify the built Gateway image.\n' >&2
     exit 1
