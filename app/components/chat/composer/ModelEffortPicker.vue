@@ -21,19 +21,23 @@ const props = defineProps<{
   activeModelLabel: string;
   activeEffortValue: string;
   activeEffortCompactLabel: string;
+  activeServiceTier: string;
+  activeServiceTierLabel: string;
   effortOptions: Array<{ value: ReasoningEffort; label?: string }>;
+  serviceTierOptions: Array<{ value: string; label: string; description?: string | null }>;
   labelEffortOption: (option: { value: ReasoningEffort; label?: string }) => string;
   modelOptionValue: (modelOption: { model?: string; id: string }) => string;
 }>();
 
 const emit = defineEmits<{
-  apply: [selection: { model: string; effort: ReasoningEffort }];
+  apply: [selection: { model: string; effort: ReasoningEffort; serviceTier: string }];
 }>();
 
 const { t } = useI18n();
 const selectorOpen = ref(false);
 const draftModel = ref("");
 const draftEffort = ref<ReasoningEffort>(DEFAULT_EFFORT);
+const draftServiceTier = ref("default");
 
 const draftModelRecord = computed(() =>
   props.models.find(
@@ -56,15 +60,43 @@ const draftEffortOptions = computed(() => {
   }
   return options;
 });
+const draftServiceTierOptions = computed(() => {
+  const advertisedTiers =
+    draftModelRecord.value === undefined
+      ? props.serviceTierOptions
+      : (draftModelRecord.value.serviceTiers ?? []);
+  const options = advertisedTiers.map((option) =>
+    "value" in option
+      ? option
+      : {
+          value: option.id,
+          label: option.name || option.id,
+          description: option.description ?? null,
+        },
+  );
+  if (
+    draftServiceTier.value !== "default" &&
+    !options.some((option) => option.value === draftServiceTier.value)
+  ) {
+    options.unshift({
+      value: draftServiceTier.value,
+      label: draftServiceTier.value,
+      description: null,
+    });
+  }
+  return options;
+});
 
 watch(selectorOpen, (open) => {
   if (!open) return;
   draftModel.value =
     props.activeModel || (props.models[0] ? props.modelOptionValue(props.models[0]) : "");
   draftEffort.value = props.activeEffortValue || DEFAULT_EFFORT;
+  draftServiceTier.value = props.activeServiceTier || "default";
 });
 
-function updateDraftModel(model: string) {
+function updateDraftModel(model: unknown) {
+  if (typeof model !== "string") return;
   draftModel.value = model;
   const selectedModel = props.models.find(
     (candidate) => props.modelOptionValue(candidate) === model,
@@ -76,6 +108,12 @@ function updateDraftModel(model: string) {
   ) {
     draftEffort.value = DEFAULT_EFFORT;
   }
+  if (
+    draftServiceTier.value !== "default" &&
+    !(selectedModel?.serviceTiers ?? []).some((option) => option.id === draftServiceTier.value)
+  ) {
+    draftServiceTier.value = "default";
+  }
 }
 
 function cancelSelection() {
@@ -84,7 +122,11 @@ function cancelSelection() {
 
 function applySelection() {
   if (draftModel.value === "") return;
-  emit("apply", { model: draftModel.value, effort: draftEffort.value });
+  emit("apply", {
+    model: draftModel.value,
+    effort: draftEffort.value,
+    serviceTier: draftServiceTier.value,
+  });
   selectorOpen.value = false;
 }
 
@@ -111,12 +153,18 @@ function preventInitialFocus(event: Event) {
           <span v-if="activeEffortCompactLabel" class="shrink-0 text-ink-muted">
             {{ activeEffortCompactLabel }}
           </span>
+          <span v-if="activeServiceTierLabel" class="shrink-0 text-ink-muted">
+            {{ activeServiceTierLabel }}
+          </span>
         </span>
         <span class="hidden truncate text-ink sm:inline">{{
           loadingModels ? t("app.loadingModels") : activeModelLabel
         }}</span>
         <span v-if="activeEffortCompactLabel" class="hidden shrink-0 text-ink-muted sm:inline">
           {{ activeEffortCompactLabel }}
+        </span>
+        <span v-if="activeServiceTierLabel" class="hidden shrink-0 text-ink-muted sm:inline">
+          {{ activeServiceTierLabel }}
         </span>
         <ChevronDownIcon class="size-4 text-ink-muted" />
       </Button>
@@ -154,6 +202,40 @@ function preventInitialFocus(event: Event) {
                 class="min-h-11 text-sm"
               >
                 {{ labelEffortOption(option) }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </label>
+
+        <label
+          v-if="draftServiceTierOptions.length"
+          class="grid gap-2 text-xs font-medium text-ink-secondary"
+        >
+          <span>{{ t("app.serviceTier") }}</span>
+          <Select v-model="draftServiceTier">
+            <SelectTrigger
+              class="h-12 w-full rounded-xl px-3 text-sm"
+              data-testid="service-tier-select"
+            >
+              <SelectValue :placeholder="t('app.serviceTierDefault')" />
+            </SelectTrigger>
+            <SelectContent position="popper" class="max-h-[min(45dvh,20rem)]">
+              <SelectItem value="default" class="min-h-11 text-sm">
+                {{ t("app.serviceTierDefault") }}
+              </SelectItem>
+              <SelectItem
+                v-for="option in draftServiceTierOptions"
+                :key="option.value"
+                :value="option.value"
+                :data-testid="`service-tier-option-${option.value}`"
+                class="min-h-11 text-sm"
+              >
+                <span class="flex flex-col">
+                  <span>{{ option.label }}</span>
+                  <span v-if="option.description" class="text-[0.625rem] text-muted-foreground">
+                    {{ option.description }}
+                  </span>
+                </span>
               </SelectItem>
             </SelectContent>
           </Select>

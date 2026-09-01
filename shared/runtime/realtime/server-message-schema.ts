@@ -92,6 +92,7 @@ const threadSettingsSchema = z
   .object({
     model: nullableString,
     effort: nullableString,
+    serviceTier: nullableString,
     approvalPolicy: z.enum(["untrusted", "on-request", "never"]).nullable().optional(),
     collaborationMode: z
       .object({

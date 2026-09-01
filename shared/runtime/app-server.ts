@@ -71,6 +71,7 @@ const appServerThreadSettingsSchema = z
   .object({
     model: z.string().min(1),
     effort: z.string().nullable().optional(),
+    serviceTier: z.string().nullable().optional(),
     approvalPolicy: z.unknown(),
     collaborationMode: appServerCollaborationModeSchema,
   })
@@ -97,6 +98,7 @@ export function threadSettingsFromAppServer(value: unknown): ThreadSettingsState
   return {
     model: parsed.data.model,
     effort: parsed.data.effort ?? null,
+    serviceTier: parsed.data.serviceTier ?? null,
     approvalPolicy: approvalPolicyFromAppServer(parsed.data.approvalPolicy),
     collaborationMode: threadCollaborationModeFromAppServer(parsed.data.collaborationMode),
   };
@@ -394,6 +396,7 @@ const threadResumeResultSchema = z
     thread: appServerThreadSchema,
     model: z.string().min(1),
     reasoningEffort: z.string().nullable(),
+    serviceTier: z.string().nullable().optional(),
     approvalPolicy: z.union([
       z.literal("untrusted"),
       z.literal("on-request"),

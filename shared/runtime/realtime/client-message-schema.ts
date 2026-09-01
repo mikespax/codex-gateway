@@ -31,7 +31,10 @@ const fileInput = z.preprocess((value) => {
 
   // Compatibility for browser tabs opened before composer attachment payloads were projected to
   // wire-only fields. Keep the trust boundary strict for every other unknown property.
-  const { id: _legacyComposerId, ...wireValue } = value as Record<string, unknown>;
+  const wireValue: Record<string, unknown> = {};
+  for (const [key, property] of Object.entries(value)) {
+    if (key !== "id") wireValue[key] = property;
+  }
   return wireValue;
 }, strictFileInput);
 const collaborationMode = z
@@ -107,6 +110,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         cwd: nullableString,
         model: nullableString,
         effort: nullableString,
+        serviceTier: nullableString,
         approvalPolicy,
       })
       .strict(),
@@ -121,6 +125,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         cwd: nullableString,
         model: nullableString,
         effort: nullableString,
+        serviceTier: nullableString,
         approvalPolicy,
         collaborationMode,
         images: z.array(imageInput).optional(),

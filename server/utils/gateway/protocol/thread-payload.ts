@@ -45,6 +45,8 @@ export function buildTurnStartParams(
     cwd: input.cwd === "" || input.cwd === undefined ? null : input.cwd,
     model: input.model === "" || input.model === undefined ? null : input.model,
     effort: input.effort === "" || input.effort === undefined ? null : input.effort,
+    serviceTier:
+      input.serviceTier === "" || input.serviceTier === undefined ? null : input.serviceTier,
     approvalPolicy: input.approvalPolicy ?? null,
     collaborationMode:
       input.collaborationMode !== null && input.collaborationMode !== undefined
@@ -76,9 +78,11 @@ export function extractThreadSettings(source: unknown): ThreadSettingsState {
   if (currentProtocolSettings !== null) return currentProtocolSettings;
   const model = threadSettings?.model ?? sourceRecord?.model;
   const effort = threadSettings?.effort ?? sourceRecord?.reasoningEffort;
+  const serviceTier = threadSettings?.serviceTier ?? sourceRecord?.serviceTier;
   return {
     model: typeof model === "string" ? model : null,
     effort: typeof effort === "string" ? effort : null,
+    serviceTier: typeof serviceTier === "string" ? serviceTier : null,
     approvalPolicy: normalizeApprovalPolicy(
       threadSettings?.approvalPolicy ?? sourceRecord?.approvalPolicy,
     ),

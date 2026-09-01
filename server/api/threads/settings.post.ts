@@ -11,6 +11,7 @@ export default defineGatewayEventHandler(async (event) => {
   return threadBroker.updateThreadSettings(host, input.threadId, {
     model: input.model,
     effort: input.effort,
+    serviceTier: input.serviceTier,
     approvalPolicy: input.approvalPolicy,
     collaborationMode: input.collaborationMode,
   });

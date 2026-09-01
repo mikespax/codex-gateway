@@ -95,6 +95,7 @@ export type RealtimeClientMessage =
       cwd?: string | null;
       model?: string | null;
       effort?: ReasoningEffort | null;
+      serviceTier?: string | null;
       approvalPolicy?: ApprovalPolicy | null;
     }
   | {
@@ -108,6 +109,7 @@ export type RealtimeClientMessage =
       cwd?: string | null;
       model?: string | null;
       effort?: ReasoningEffort | null;
+      serviceTier?: string | null;
       approvalPolicy?: ApprovalPolicy | null;
       collaborationMode?: ComposerTurnOptions["collaborationMode"];
       images?: ComposerTurnOptions["images"];

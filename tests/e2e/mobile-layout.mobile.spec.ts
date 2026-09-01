@@ -334,7 +334,11 @@ test("shows effort and compact context usage without mobile approval controls", 
   await openApp(page);
   const settingsUpdates: Array<Record<string, unknown>> = [];
   await page.route("**/api/threads/settings", async (route) => {
-    settingsUpdates.push(route.request().postDataJSON() as Record<string, unknown>);
+    const body: unknown = route.request().postDataJSON();
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      throw new Error("settings request body must be an object");
+    }
+    settingsUpdates.push(asRecord(body));
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   const threadId = "mobile-composer-settings";
@@ -361,6 +365,7 @@ test("shows effort and compact context usage without mobile approval controls", 
           { reasoningEffort: "medium" },
           { reasoningEffort: "high" },
         ],
+        serviceTiers: [{ id: "fast", name: "Fast", description: "Prioritize lower latency" }],
       },
       {
         id: "gpt-5.6-sol",
@@ -371,6 +376,7 @@ test("shows effort and compact context usage without mobile approval controls", 
           { reasoningEffort: "medium" },
           { reasoningEffort: "high" },
         ],
+        serviceTiers: [{ id: "fast", name: "Fast", description: "Prioritize lower latency" }],
       },
     ],
     tokenUsage: {
@@ -412,6 +418,8 @@ test("shows effort and compact context usage without mobile approval controls", 
   await page.getByTestId("effort-option-high").click();
   await page.getByTestId("model-dropdown-select").click();
   await page.getByTestId("model-option-gpt-5.6-sol").click();
+  await page.getByTestId("service-tier-select").click();
+  await page.getByTestId("service-tier-option-fast").click();
   await page.getByTestId("model-selector-ok").click();
   await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
   await expect(page.getByTestId("model-select")).toContainText("High");
@@ -422,6 +430,7 @@ test("shows effort and compact context usage without mobile approval controls", 
     threadId,
     model: "gpt-5.6-sol",
     effort: "high",
+    serviceTier: "fast",
   });
 
   await page.getByTestId("model-select").click();
@@ -491,6 +500,13 @@ test("shows effort and compact context usage without mobile approval controls", 
   await expect(page.getByTestId("composer-surface")).toContainText("mobile-assets.zip");
   expect(uploadCount).toBe(1);
 });
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("expected an object");
+  }
+  return Object.fromEntries(Object.entries(value));
+}
 
 test("gives the Goal objective most of the mobile details dialog", async ({ page }) => {
   await openApp(page);

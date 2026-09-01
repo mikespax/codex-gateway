@@ -148,6 +148,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
       composer.setThreadSettings(hostId, threadId, {
         ...(options.model !== undefined ? { model: options.model } : {}),
         ...(options.effort !== undefined ? { effort: options.effort } : {}),
+        ...(options.serviceTier !== undefined ? { serviceTier: options.serviceTier } : {}),
         ...(options.approvalPolicy !== undefined ? { approvalPolicy: options.approvalPolicy } : {}),
       });
     }

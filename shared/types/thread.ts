@@ -83,6 +83,7 @@ export interface ThreadCollaborationMode {
 export interface ThreadSettingsState {
   model?: string | null;
   effort?: ReasoningEffort | null;
+  serviceTier?: string | null;
   approvalPolicy?: ApprovalPolicy | null;
   collaborationMode?: ThreadCollaborationMode | null;
 }
@@ -230,6 +231,7 @@ export interface FileReference {
 export interface ComposerTurnOptions {
   model?: string | null;
   effort?: ReasoningEffort | null;
+  serviceTier?: string | null;
   approvalPolicy?: ApprovalPolicy | null;
   collaborationMode?: ThreadCollaborationMode | null;
   images?: Array<{

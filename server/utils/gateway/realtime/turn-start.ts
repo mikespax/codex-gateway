@@ -22,6 +22,7 @@ export async function startTurnFromRealtime(message: RealtimeTurnStartMessage) {
     clientUserMessageId: input.clientUserMessageId,
     model: input.model,
     effort: input.effort,
+    serviceTier: input.serviceTier,
     approvalPolicy: input.approvalPolicy,
     collaborationMode: input.collaborationMode,
     images: input.images,

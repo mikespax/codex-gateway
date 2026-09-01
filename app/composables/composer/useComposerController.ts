@@ -69,6 +69,10 @@ export function useComposerController() {
       // Existing-thread settings are projected from thread/resume instead of inferred here.
       model: settings.selectedModel.value === "" ? undefined : settings.selectedModel.value,
       effort,
+      serviceTier:
+        settings.selectedServiceTier.value === "default"
+          ? undefined
+          : settings.selectedServiceTier.value,
       approvalPolicy:
         settings.selectedApprovalMode.value === "custom"
           ? undefined

@@ -58,6 +58,7 @@ export function requestStartThread(options: ComposerTurnOptions) {
       cwd: projectById(gateway.projects, navigation.selectedProjectId)?.remotePath,
       model: options.model === "" ? undefined : options.model,
       effort: options.effort === "" ? undefined : options.effort,
+      serviceTier: options.serviceTier === "" ? undefined : options.serviceTier,
       approvalPolicy: options.approvalPolicy ?? undefined,
     }),
     expectThreadStarted,

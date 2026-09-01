@@ -111,6 +111,7 @@ export async function startThread(
       cwd: input.cwd === "" ? undefined : input.cwd,
       model: input.model === "" ? undefined : input.model,
       effort: input.effort === "" ? undefined : input.effort,
+      serviceTier: input.serviceTier === "" ? undefined : input.serviceTier,
       approvalPolicy: input.approvalPolicy ?? undefined,
     },
     input.projectId ?? null,

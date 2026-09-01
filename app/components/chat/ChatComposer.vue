@@ -6,6 +6,8 @@ import { useComposerController } from "@/composables/composer/useComposerControl
 const {
   activeEffortCompactLabel,
   activeEffortValue,
+  activeServiceTier,
+  activeServiceTierLabel,
   activeModel,
   activeModelLabel,
   activePlanSummary,
@@ -45,6 +47,7 @@ const {
   selectedProjectId,
   selectedThreadStatus,
   selectedThreadTokenUsage,
+  serviceTierOptions,
   sendButtonLabel,
   saveSelectedThreadGoal,
   stopSelectedThreadGoal,
@@ -102,7 +105,10 @@ onMounted(focusDesktopComposer);
     :active-model-label="activeModelLabel"
     :active-effort-value="activeEffortValue"
     :active-effort-compact-label="activeEffortCompactLabel"
+    :active-service-tier="activeServiceTier"
+    :active-service-tier-label="activeServiceTierLabel"
     :effort-options="effortOptions"
+    :service-tier-options="serviceTierOptions"
     :label-effort-option="labelEffortOption"
     :model-option-value="modelOptionValue"
     :has-composer-input="hasComposerInput"

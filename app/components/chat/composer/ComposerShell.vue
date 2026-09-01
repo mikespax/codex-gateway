@@ -43,7 +43,10 @@ const props = defineProps<{
   activeModelLabel: string;
   activeEffortValue: string;
   activeEffortCompactLabel: string;
+  activeServiceTier: string;
+  activeServiceTierLabel: string;
   effortOptions: Array<{ value: ReasoningEffort; label?: string }>;
+  serviceTierOptions: Array<{ value: string; label: string; description?: string | null }>;
   labelEffortOption: (option: { value: ReasoningEffort; label?: string }) => string;
   modelOptionValue: (modelOption: { model?: string; id: string }) => string;
   hasComposerInput: boolean;
@@ -75,7 +78,7 @@ const emit = defineEmits<{
   primaryAction: [];
   interruptTurn: [];
   updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
-  applyModelEffort: [selection: { model: string; effort: ReasoningEffort }];
+  applyModelEffort: [selection: { model: string; effort: ReasoningEffort; serviceTier: string }];
 }>();
 
 const composerEditor = ref<InstanceType<typeof ComposerEditor> | null>(null);
@@ -280,7 +283,10 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           :active-model-label="activeModelLabel"
           :active-effort-value="activeEffortValue"
           :active-effort-compact-label="activeEffortCompactLabel"
+          :active-service-tier="activeServiceTier"
+          :active-service-tier-label="activeServiceTierLabel"
           :effort-options="effortOptions"
+          :service-tier-options="serviceTierOptions"
           :label-effort-option="labelEffortOption"
           :model-option-value="modelOptionValue"
           :has-composer-input="hasComposerInput"

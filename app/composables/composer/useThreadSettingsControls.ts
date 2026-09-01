@@ -16,6 +16,7 @@ export function useThreadSettingsControls() {
   const { selectedThreadId } = storeToRefs(navigation);
   const newThreadModel = ref("");
   const newThreadEffort = ref<ReasoningEffort>("default");
+  const newThreadServiceTier = ref("default");
   const newThreadApprovalMode = ref<ApprovalPolicy | "custom">("never");
 
   // Existing-thread controls are computed proxies over the per-thread Pinia state. Do not mirror
@@ -51,6 +52,22 @@ export function useThreadSettingsControls() {
         return;
       }
       void composer.saveSelectedThreadSettings({ effort: effort === "default" ? null : effort });
+    },
+  });
+  const selectedServiceTier = computed({
+    get: () =>
+      selectedThreadId.value === null
+        ? newThreadServiceTier.value
+        : (trimmedOrNull(selectedThreadSettings.value.serviceTier) ?? "default"),
+    set: (serviceTier: string) => {
+      const normalized = trimmedOrNull(serviceTier);
+      if (selectedThreadId.value === null) {
+        newThreadServiceTier.value = normalized ?? "default";
+        return;
+      }
+      void composer.saveSelectedThreadSettings({
+        serviceTier: normalized === null || normalized === "default" ? null : normalized,
+      });
     },
   });
   const selectedApprovalMode = computed<ApprovalPolicy | "custom">({
@@ -121,6 +138,34 @@ export function useThreadSettingsControls() {
     }
     return options;
   });
+  const serviceTierOptions = computed(() => {
+    const tiers = activeModelRecord.value?.serviceTiers ?? [];
+    const options = tiers
+      .filter((tier) => typeof tier.id === "string" && tier.id.trim() !== "")
+      .map((tier) => ({
+        value: tier.id,
+        label: trimmedOrFallback(tier.name, tier.id),
+        description: tier.description ?? null,
+      }));
+    if (
+      selectedServiceTier.value !== "default" &&
+      !options.some((option) => option.value === selectedServiceTier.value)
+    ) {
+      options.unshift({
+        value: selectedServiceTier.value,
+        label: selectedServiceTier.value,
+        description: null,
+      });
+    }
+    return options;
+  });
+  const activeServiceTierLabel = computed(() => {
+    if (selectedServiceTier.value === "default") return "";
+    return (
+      serviceTierOptions.value.find((option) => option.value === selectedServiceTier.value)
+        ?.label ?? selectedServiceTier.value
+    );
+  });
   const activeEffortCompactLabel = computed(() => compactEffortLabel(activeEffortValue.value));
 
   function compactEffortLabel(value: string) {
@@ -159,15 +204,24 @@ export function useThreadSettingsControls() {
     selectedEffort.value = effort;
   }
 
-  function applySelectedModelEffort(selection: { model: string; effort: ReasoningEffort }) {
+  function applySelectedModelEffort(selection: {
+    model: string;
+    effort: ReasoningEffort;
+    serviceTier: string;
+  }) {
     if (selectedThreadId.value === null) {
       newThreadModel.value = selection.model;
       newThreadEffort.value = selection.effort;
+      newThreadServiceTier.value = selection.serviceTier || "default";
       return;
     }
     void composer.saveSelectedThreadSettings({
       model: trimmedOrNull(selection.model),
       effort: selection.effort === "default" ? null : selection.effort,
+      serviceTier:
+        selection.serviceTier === "" || selection.serviceTier === "default"
+          ? null
+          : selection.serviceTier,
     });
   }
 
@@ -178,13 +232,17 @@ export function useThreadSettingsControls() {
   return {
     selectedModel,
     selectedEffort,
+    selectedServiceTier,
     selectedApprovalMode,
     activeModel,
     collaborationModel,
     activeModelLabel,
     activeEffortValue,
     activeEffortCompactLabel,
+    activeServiceTier: selectedServiceTier,
+    activeServiceTierLabel,
     effortOptions,
+    serviceTierOptions,
     labelEffortOption,
     modelOptionValue,
     setSelectedModel,

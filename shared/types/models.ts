@@ -1,3 +1,9 @@
+export interface ModelServiceTier {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
 export interface ModelRecord {
   id: string;
   model: string;
@@ -11,6 +17,9 @@ export interface ModelRecord {
     reasoningEffort: string;
     description?: string | null;
   }>;
+  /** Service tiers advertised by the remote Codex app-server (for example `fast`). */
+  serviceTiers?: ModelServiceTier[];
+  defaultServiceTier?: string | null;
   inputModalities?: string[];
   multiAgentVersion?: "disabled" | "v1" | "v2" | null;
   upgradeInfo?: {
