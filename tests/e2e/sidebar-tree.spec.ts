@@ -231,6 +231,101 @@ test("keeps non-pinned main threads in recent activity for the page session", as
   expect(sectionOrder[1]).toBeLessThan(sectionOrder[2]!);
 });
 
+test("does not reorder chat activity while a turn is still running", async ({ page }) => {
+  await openApp(page);
+  const host = {
+    ...defaultGatewayHost(105),
+    name: "Stable activity host",
+  };
+  const project = {
+    ...defaultGatewayProject(105, 205),
+    name: "Stable activity project",
+    remotePath: "/workspace/stable-activity",
+  };
+  await page.evaluate(
+    ({ host, project }) => {
+      const driver = window.__codexGatewayE2e;
+      if (!driver) throw new Error("Gateway E2E driver is unavailable");
+      const now = Math.floor(Date.now() / 1000);
+      const base = [
+        {
+          id: "stable-chat-a",
+          title: "Stable chat A",
+          updatedAt: now - 100,
+        },
+        {
+          id: "stable-chat-b",
+          title: "Stable chat B",
+          updatedAt: now - 200,
+        },
+      ];
+      driver.catalog.hosts = [host];
+      driver.catalog.projects = [project];
+      driver.activity.ingestMetadata(
+        host.id,
+        base.map((thread) => ({
+          ...thread,
+          projectId: project.id,
+          cwd: project.remotePath,
+          parentThreadId: null,
+          agentNickname: null,
+          agentRole: null,
+          name: null,
+          preview: null,
+          recencyAt: null,
+        })),
+        [project],
+      );
+      // Simulate the realtime summary churn emitted by tool/code activity. The newer observed
+      // timestamp must not move chat B before chat A until the turn reaches a terminal status.
+      driver.activity.ingestMetadata(
+        host.id,
+        [
+          {
+            id: "stable-chat-b",
+            title: "Stable chat B",
+            updatedAt: now + 100,
+            projectId: project.id,
+            cwd: project.remotePath,
+            parentThreadId: null,
+            agentNickname: null,
+            agentRole: null,
+            name: null,
+            preview: null,
+            recencyAt: null,
+          },
+        ],
+        [project],
+      );
+    },
+    { host, project },
+  );
+
+  const recentRows = page.locator('[data-testid^="recent-thread-button-"]');
+  await expect(recentRows).toHaveCount(2);
+  await expect
+    .poll(() =>
+      recentRows.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute("data-testid")?.replace("recent-thread-button-", "")),
+      ),
+    )
+    .toEqual(["stable-chat-a", "stable-chat-b"]);
+
+  await page.evaluate(() => {
+    const runtime = window.__codexGatewayE2e?.runtime;
+    if (!runtime) throw new Error("Gateway E2E driver is unavailable");
+    runtime.setThreadStatus(105, "stable-chat-b", "running");
+    runtime.setThreadStatus(105, "stable-chat-b", "completed");
+  });
+  await expect
+    .poll(() =>
+      recentRows.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute("data-testid")?.replace("recent-thread-button-", "")),
+      ),
+    )
+    .toEqual(["stable-chat-b", "stable-chat-a"]);
+});
+
 test("sorts pinned threads for display without rewriting persisted pin order", async ({ page }) => {
   await openApp(page);
   const hosts = [

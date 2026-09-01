@@ -74,8 +74,9 @@ function compareSidebarLabels(left: string, right: string) {
 
 /**
  * Returns a display-only copy so deterministic sidebar ordering never rewrites the user's
- * persisted pin list. The newest activity is always first; host/title/identity tie-breakers
- * keep the order deterministic when timestamps compare equal.
+ * persisted pin list. Rows move up only after a turn completes; tool and code activity updates do
+ * not reshuffle an active sidebar. Host/title/identity tie-breakers keep the order deterministic
+ * when timestamps compare equal.
  */
 export function sortPinnedThreadsForDisplay(
   threads: readonly PinnedThreadRecord[],
@@ -107,10 +108,13 @@ function pinnedThreadActivityAt(
   thread: PinnedThreadRecord,
   activityByKey: Readonly<Record<string, ThreadActivitySummary>>,
 ) {
-  const liveActivity = activityByKey[pinnedThreadKey(thread)]?.updatedAt;
-  return typeof liveActivity === "number" && Number.isFinite(liveActivity)
-    ? liveActivity
-    : Number(thread.updatedAt ?? 0);
+  const activity = activityByKey[pinnedThreadKey(thread)];
+  const completionAt = activity?.completionAt;
+  return typeof completionAt === "number" && Number.isFinite(completionAt)
+    ? completionAt
+    : typeof activity?.displayActivityAt === "number" && Number.isFinite(activity.displayActivityAt)
+      ? activity.displayActivityAt
+      : Number(thread.updatedAt ?? 0);
 }
 
 export function threadKey(hostId: number, threadId: string) {

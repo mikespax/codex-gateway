@@ -22,6 +22,13 @@ export interface ThreadActivitySummary {
   agentRole: string | null;
   isSubAgent: boolean;
   updatedAt: number;
+  /**
+   * Stable display-order baseline. Realtime summaries may update `updatedAt` while a turn is
+   * running, but this marker must not move until `completionAt` records a terminal transition.
+   */
+  displayActivityAt?: number;
+  /** Display-only ordering marker updated only when a running turn becomes terminal. */
+  completionAt?: number;
 }
 
 export interface ThreadActivityMetadata {
@@ -58,8 +65,8 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     const key = pinnedKey(summary.hostId, summary.threadId);
     const existing = summariesByKey.value[key];
     // Opening a chat reads its current snapshot. That is not new activity and must not reorder
-    // the Recent chats list. A real turn still calls touchThread(), while catalog/realtime
-    // updates continue to provide authoritative recency for unseen threads.
+    // the Recent chats list. A completed turn receives its display marker from the runtime
+    // transition, while catalog/realtime updates continue to provide authoritative recency.
     if (options.preserveActivity === true && existing !== undefined) {
       summary.updatedAt = existing.updatedAt;
     }
@@ -109,11 +116,15 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
   function upsertSummary(summary: ThreadActivitySummary) {
     const key = pinnedKey(summary.hostId, summary.threadId);
     const existing = summariesByKey.value[key];
+    const displayActivityAt = existing?.displayActivityAt ?? summary.updatedAt;
     summariesByKey.value = {
       ...summariesByKey.value,
       [key]: {
         ...existing,
         ...summary,
+        // Keep the display baseline stable across realtime catalog/item updates. The completion
+        // marker is the only event that is allowed to move a row during this page session.
+        displayActivityAt,
         projectId: summary.projectId ?? existing?.projectId ?? null,
         cwd: summary.cwd ?? existing?.cwd ?? null,
         projectName: summary.projectName ?? existing?.projectName ?? null,
@@ -137,13 +148,13 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     observedRunningThreadKeys.value = [...observedRunningThreadKeys.value, key];
   }
 
-  function touchThread(hostId: number, threadId: string) {
+  function markTurnCompleted(hostId: number, threadId: string) {
     const key = pinnedKey(hostId, threadId);
     const existing = summariesByKey.value[key];
     if (existing === undefined) return;
     summariesByKey.value = {
       ...summariesByKey.value,
-      [key]: { ...existing, updatedAt: Math.floor(Date.now() / 1000) },
+      [key]: { ...existing, completionAt: Math.floor(Date.now() / 1000) },
     };
   }
 
@@ -170,7 +181,7 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     upsertGatewayThread,
     upsertAppServerThread,
     recordRuntimeStatus,
-    touchThread,
+    markTurnCompleted,
     updateTitle,
     resetState,
   };

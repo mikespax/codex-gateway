@@ -34,7 +34,7 @@ export function useRecentThreadActivity() {
         (thread): thread is ThreadActivitySummary =>
           // app-server parentThreadId is the authoritative sub-agent marker. Sub-agents stay in
           // their parent workspace rather than flooding the cross-host list.
-          !thread.isSubAgent && thread.updatedAt >= cutoff,
+          !thread.isSubAgent && recentDisplayActivityAt(thread) >= cutoff,
       )
       .map((thread) => ({
         ...thread,
@@ -45,10 +45,7 @@ export function useRecentThreadActivity() {
         completionAttention: unviewedKeys.has(keyFor(thread)),
         pinned: pinnedKeys.has(keyFor(thread)),
       }))
-      .sort((left, right) => {
-        const runningOrder = Number(right.status === "running") - Number(left.status === "running");
-        return runningOrder || right.updatedAt - left.updatedAt;
-      });
+      .sort(compareRecentThreads);
   });
 
   function openRecentThread(thread: ThreadActivitySummary) {
@@ -79,6 +76,22 @@ export function useRecentThreadActivity() {
     openRecentThread,
     pinRecentThread,
   };
+}
+
+function recentDisplayActivityAt(thread: ThreadActivitySummary) {
+  return typeof thread.completionAt === "number" && Number.isFinite(thread.completionAt)
+    ? thread.completionAt
+    : typeof thread.displayActivityAt === "number" && Number.isFinite(thread.displayActivityAt)
+      ? thread.displayActivityAt
+      : thread.updatedAt;
+}
+
+function compareRecentThreads(left: ThreadActivitySummary, right: ThreadActivitySummary) {
+  const byActivity = recentDisplayActivityAt(right) - recentDisplayActivityAt(left);
+  if (byActivity !== 0) return byActivity;
+  const byHost = left.hostId - right.hostId;
+  if (byHost !== 0) return byHost;
+  return left.threadId.localeCompare(right.threadId);
 }
 
 function keyFor(thread: ThreadActivitySummary) {
