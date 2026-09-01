@@ -5,6 +5,8 @@ import { useGatewayComposerStore } from "@/stores/gateway-composer";
 import { useGatewayTerminalStore } from "@/stores/gateway-terminal";
 import { useGatewayHostMetricsDataStore } from "@/stores/gateway-host-metrics/data";
 import { useGatewayTmuxStore } from "@/stores/gateway-tmux";
+import { showDesktopTurnCompletionNotification } from "@/utils/desktop-notifications";
+import { playTurnCompletionSound } from "@/utils/turn-completion-sound";
 import { gatewayDomainEvents } from "../domain-events";
 import { notificationAction, projectPublishedNotification } from "../notifications/actions";
 
@@ -72,6 +74,13 @@ export function registerRealtimeResourceSubscribers() {
   gatewayDomainEvents.on("realtime-notification-published", ({ notification, actionLabel }) => {
     projectPublishedNotification(notification);
     if (device.isMobileOrTablet) return;
+    if (
+      notification.key.startsWith("thread-terminal:") ||
+      notification.key.startsWith("thread-goal:")
+    ) {
+      playTurnCompletionSound(notification.key);
+      showDesktopTurnCompletionNotification(notification);
+    }
     const action = notificationAction(notification);
     toast.info(notification.title, {
       id: notification.key,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { BellIcon, Loader2Icon } from "@lucide/vue";
-import { computed, ref, watch } from "vue";
+import { BellIcon, BellRingIcon, Loader2Icon, Volume2Icon } from "@lucide/vue";
+import { computed, onMounted, ref, watch } from "vue";
 import type { GatewayNotificationSettings } from "~~/shared/types";
 import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
@@ -9,6 +9,19 @@ import { Switch } from "@codex-gateway/ui/switch";
 import { useGatewayConfigStore } from "@/stores/gateway-config";
 import { normalizeNotificationSettings } from "@/stores/gateway/config";
 import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
+import {
+  isTurnCompletionSoundEnabled,
+  setTurnCompletionSoundEnabled,
+  testTurnCompletionSound,
+} from "@/utils/turn-completion-sound";
+import {
+  desktopNotificationPermission,
+  isDesktopNotificationsEnabled,
+  isDesktopNotificationsSupported,
+  requestDesktopNotificationPermission,
+  setDesktopNotificationsEnabled,
+  testDesktopNotification,
+} from "@/utils/desktop-notifications";
 
 const store = useGatewayConfigStore();
 const { t } = useI18n();
@@ -16,6 +29,15 @@ const errorLabels = computed(() => errorMessageLabels(t));
 const saving = ref(false);
 const error = ref("");
 const form = ref<GatewayNotificationSettings>(normalizeNotificationSettings());
+const completionSoundEnabled = ref(true);
+const completionSoundReady = ref(false);
+const desktopNotificationsSupported = ref(false);
+const desktopNotificationsEnabled = ref(false);
+const desktopNotificationPermissionState = ref<NotificationPermission | "unsupported">(
+  "unsupported",
+);
+const desktopNotificationsReady = ref(false);
+const device = useDevice();
 const barkGroup = computed({
   get: () => form.value.bark.group ?? "",
   set: (value: string | number) => {
@@ -30,6 +52,39 @@ watch(
   },
   { immediate: true, deep: true },
 );
+
+onMounted(() => {
+  completionSoundEnabled.value = isTurnCompletionSoundEnabled();
+  completionSoundReady.value = true;
+  desktopNotificationsSupported.value = isDesktopNotificationsSupported();
+  desktopNotificationsEnabled.value = isDesktopNotificationsEnabled();
+  desktopNotificationPermissionState.value = desktopNotificationPermission();
+  desktopNotificationsReady.value = true;
+});
+
+watch(completionSoundEnabled, (enabled) => {
+  if (completionSoundReady.value) setTurnCompletionSoundEnabled(enabled);
+});
+
+async function playTestSound() {
+  if (!completionSoundEnabled.value) return;
+  await testTurnCompletionSound();
+}
+
+async function enableDesktopNotifications() {
+  const permission = await requestDesktopNotificationPermission();
+  desktopNotificationPermissionState.value = permission;
+  desktopNotificationsEnabled.value = permission === "granted";
+}
+
+async function playTestDesktopNotification() {
+  if (!desktopNotificationsEnabled.value) return;
+  await testDesktopNotification();
+}
+
+watch(desktopNotificationsEnabled, (enabled) => {
+  if (desktopNotificationsReady.value) setDesktopNotificationsEnabled(enabled);
+});
 
 async function saveSettings() {
   error.value = "";
@@ -50,6 +105,102 @@ async function saveSettings() {
 
 <template>
   <div class="max-w-2xl space-y-5">
+    <div
+      v-if="!device.isMobileOrTablet"
+      data-testid="desktop-completion-sound-settings"
+      class="rounded-xl border border-hairline bg-canvas-soft/70 p-4"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex min-w-0 items-start gap-2">
+          <Volume2Icon class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+          <div>
+            <Label for="desktop-completion-sound">{{ t("app.desktopCompletionSound") }}</Label>
+            <p class="text-sm text-ink-secondary">
+              {{ t("app.desktopCompletionSoundDescription") }}
+            </p>
+          </div>
+        </div>
+        <Switch
+          id="desktop-completion-sound"
+          v-model="completionSoundEnabled"
+          :disabled="!completionSoundReady"
+        />
+      </div>
+      <div class="mt-3 flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="!completionSoundReady || !completionSoundEnabled"
+          @click="playTestSound"
+        >
+          <Volume2Icon class="size-4" />
+          {{ t("app.testCompletionSound") }}
+        </Button>
+      </div>
+    </div>
+
+    <div
+      v-if="!device.isMobileOrTablet"
+      data-testid="desktop-notification-settings"
+      class="rounded-xl border border-hairline bg-canvas-soft/70 p-4"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex min-w-0 items-start gap-2">
+          <BellRingIcon class="mt-0.5 size-4 shrink-0 text-ink-muted" />
+          <div>
+            <Label for="desktop-notifications">{{ t("app.desktopNotifications") }}</Label>
+            <p class="text-sm text-ink-secondary">
+              {{ t("app.desktopNotificationsDescription") }}
+            </p>
+          </div>
+        </div>
+        <Switch
+          id="desktop-notifications"
+          v-model="desktopNotificationsEnabled"
+          :disabled="
+            !desktopNotificationsReady ||
+            !desktopNotificationsSupported ||
+            desktopNotificationPermissionState !== 'granted'
+          "
+        />
+      </div>
+      <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+        <span v-if="desktopNotificationsSupported" class="text-xs text-ink-muted">
+          {{
+            t("app.desktopNotificationPermission", {
+              permission: desktopNotificationPermissionState,
+            })
+          }}
+        </span>
+        <span v-else class="text-xs text-ink-muted">
+          {{ t("app.desktopNotificationsUnsupported") }}
+        </span>
+        <Button
+          v-if="desktopNotificationsSupported && desktopNotificationPermissionState !== 'granted'"
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="!desktopNotificationsReady"
+          @click="enableDesktopNotifications"
+        >
+          <BellRingIcon class="size-4" />
+          {{ t("app.enableDesktopNotifications") }}
+        </Button>
+        <Button
+          v-else-if="desktopNotificationsSupported"
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="!desktopNotificationsReady || !desktopNotificationsEnabled"
+          @click="playTestDesktopNotification"
+        >
+          <BellIcon class="size-4" />
+          {{ t("app.testDesktopNotification") }}
+        </Button>
+      </div>
+    </div>
+
     <div class="space-y-1">
       <div class="flex items-center gap-2 font-medium">
         <BellIcon class="size-4 text-ink-muted" />
