@@ -31,7 +31,7 @@ async function listAllThreads(
   let cursor: string | null = null;
 
   for (let page = 0; page < MAX_THREAD_LIST_PAGES; page += 1) {
-    const response = await gatewayApi<ThreadListResponse>("/api/threads", {
+    const response: ThreadListResponse = await gatewayApi<ThreadListResponse>("/api/threads", {
       query: cursor === null ? query : { ...query, cursor },
     });
     if (!sessionIsCurrent()) return null;

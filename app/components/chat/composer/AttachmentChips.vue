@@ -44,7 +44,7 @@ function shortAttachmentName(name: string, maxLength = 24) {
         class="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded bg-background/80 px-1.5 py-0.5 text-[10px] text-foreground backdrop-blur-sm"
         :title="attachment.data.filename"
       >
-        {{ shortAttachmentName(attachment.data.filename) }}
+        {{ shortAttachmentName(attachment.data.filename ?? "") }}
       </div>
       <!-- Keep removal available without requiring a precise tiny inline target. -->
       <AttachmentRemove :label="t('app.removeAttachment')" class="opacity-100" />

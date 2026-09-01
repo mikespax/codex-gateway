@@ -48,5 +48,8 @@ function aggregateFileChangeRun(run: ThreadTimelineItem[], index: number): Threa
 function statusValue(status: unknown) {
   if (typeof status === "string") return status;
   if (typeof status !== "object" || status === null || Array.isArray(status)) return undefined;
-  return typeof Reflect.get(status, "type") === "string" ? Reflect.get(status, "type") : undefined;
+  for (const [key, value] of Object.entries(status)) {
+    if (key === "type") return typeof value === "string" ? value : undefined;
+  }
+  return undefined;
 }
