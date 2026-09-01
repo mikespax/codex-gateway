@@ -33,9 +33,11 @@ COPY app ./app
 RUN pnpm exec nuxt build
 
 FROM node:${NODE_VERSION} AS runner
+ARG BUILD_SHA=unknown
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
+ENV CODEX_GATEWAY_BUILD_SHA=${BUILD_SHA}
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*

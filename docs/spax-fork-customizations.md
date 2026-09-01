@@ -1,8 +1,8 @@
 # Codex Gateway Extended
 
-Last reviewed: 2026-08-31<br>
+Last reviewed: 2026-09-01<br>
 Deployment branch: [`spax/customizations-20260824`](https://github.com/mikespax/codex-gateway-extended/tree/spax/customizations-20260824)<br>
-Reviewed application head: [`184444f`](https://github.com/mikespax/codex-gateway-extended/commit/184444f9da03f5a9161a38f093c9bba4ab12efd4)
+Reviewed application head: [`aad9578`](https://github.com/mikespax/codex-gateway-extended/commit/aad9578)
 
 This is the public inventory and maintenance guide for the deployment-specific
 changes in [`mikespax/codex-gateway-extended`](https://github.com/mikespax/codex-gateway-extended).
@@ -53,7 +53,7 @@ These screenshots use synthetic E2E data, not production chats or hosts.
 | Intermediate steps       | Condensed routine activity, hidden raw file diffs, grouped file-change summaries    | Deployed branch                                              |
 | Navigation               | Cross-host recents, pinned activity ordering, collapsible Hosts, global New Chat    | Deployed branch                                              |
 | Attachments              | Images, documents, Markdown, ZIP archives, Android document picker                  | Deployed branch                                              |
-| Notifications            | Firebase Android completion notifications with safe inline replies                  | Optional companion                                           |
+| Notifications            | Firebase Android replies plus desktop completion sound and native browser notifications | Desktop path is opt-in                                      |
 | Usage                    | Compact remaining Codex usage indicator in the mobile header                        | Deployed branch                                              |
 | Model settings           | Model and reasoning effort are staged and confirmed together                        | Deployed branch                                              |
 | Reliability              | Project/host affinity, first-send discovery, stale-client and macOS socket recovery | Deployed branch                                              |
@@ -177,7 +177,21 @@ See [Android Firebase companion](android-firebase-companion.md).
 
 Primary commits: `4386d95`, `9c25799`.
 
-### 8. Codex usage indicator
+### 8. macOS desktop browser notifications
+
+- Desktop browsers can request native macOS Notification Center permission from Settings →
+  Notifications without prompting on page load.
+- Once enabled, completed main turns (including goal completions) show a native notification when
+  the Gateway tab is backgrounded or its window is unfocused. Focused windows retain the in-app
+  toast and optional two-note completion chime instead of duplicating the native notification.
+- Notification keys are deduplicated in the browser, and the preference is local to that browser.
+  Mobile browsers remain on the native Android path and do not receive the desktop sound or browser
+  notification.
+- The test control in Settings verifies permission and delivery without creating a production turn.
+
+Primary commit: `755530e`.
+
+### 9. Codex usage indicator
 
 - A small mobile-header badge reports the remaining percentage for the active
   Codex rate-limit window.
@@ -187,17 +201,37 @@ Primary commits: `4386d95`, `9c25799`.
 
 Primary commit: `73a079e`.
 
-### 9. Model and reasoning effort confirmation
+### 10. Model and reasoning effort confirmation
 
 - Mobile uses separate compact selectors for model and reasoning effort.
 - Changes remain provisional while the dialog is open.
 - **OK** applies the pair in one settings update.
 - **Cancel**, close, and outside-click discard the draft selection.
 - The composer shows the active model/effort after the dialog closes.
+- Models that advertise Codex service tiers expose them in the same staged dialog. Selecting
+  **Fast** sends the app-server `serviceTier: "fast"` value for that model; **Default** leaves
+  the app-server's normal tier selection in control.
 
-Primary commit: `184444f`.
+Primary commits: `184444f`, current service-tier integration.
 
-### 10. Browser and app-server resilience
+### 11. Release identity and durable delivery guard
+
+- The public `/api/version` endpoint reports the non-sensitive commit SHA baked into a production
+  image and the running Node version, so a browser can be compared with reviewed source.
+- `scripts/release-gate.sh` refuses dirty checkouts and `main`/`master`; `--build` tags the image
+  with the exact commit SHA after a clean release checkout.
+- A GitHub Actions workflow draft is retained locally, but it is not presented as a green gate
+  until the repository's pre-existing supervisor-script lint and formatting debt is resolved.
+  SSH/RPC E2E remains an explicit release check because it requires the real app-server test
+  environment.
+- The release identity endpoint and release gate are kept with the source so a clean checkout can
+  be built and compared against its exact commit, while unrelated local backups and secrets remain
+  outside Git.
+
+Primary files: `Dockerfile`, `docker-compose.yml`, `scripts/release-gate.sh`,
+`server/api/version.get.ts`.
+
+### 12. Browser and app-server resilience
 
 - Stale macOS app-server Unix-socket/process combinations can be recovered without
   replacing the user's Codex state directory.
@@ -209,7 +243,7 @@ Primary commit: `184444f`.
 
 Primary commits: `ae84860`, `97ce85f`.
 
-### 11. Scoped thread supervision
+### 13. Scoped thread supervision
 
 - A supervisor grant targets one immutable account/host/project/thread tuple.
 - Its bearer token is stored only as a hash and can expire or be revoked.
