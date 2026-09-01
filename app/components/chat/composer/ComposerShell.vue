@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import type {
-  ApprovalPolicy,
   ModelRecord,
   ReasoningEffort,
   ThreadGoal,
@@ -35,7 +34,6 @@ const props = defineProps<{
   uploadingAttachments: boolean;
   selectedThreadId: string | null;
   selectedProjectId: number | null;
-  selectedApprovalMode: ApprovalPolicy | "custom";
   selectedThreadTokenUsage: ThreadTokenUsageState | null;
   models: ModelRecord[];
   loadingModels: boolean;
@@ -77,7 +75,6 @@ const emit = defineEmits<{
   fileReferenceLimit: [message: string];
   primaryAction: [];
   interruptTurn: [];
-  updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
   applyModelEffort: [selection: { model: string; effort: ReasoningEffort; serviceTier: string }];
 }>();
 
@@ -275,7 +272,6 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         <ComposerToolbar
           :uploading-attachments="uploadingAttachments"
           :selected-thread-id="selectedThreadId"
-          :selected-approval-mode="selectedApprovalMode"
           :selected-thread-token-usage="selectedThreadTokenUsage"
           :models="models"
           :loading-models="loadingModels"
@@ -300,7 +296,6 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           @attach="openAttachmentPicker"
           @primary-action="emit('primaryAction')"
           @interrupt-turn="emit('interruptTurn')"
-          @update-selected-approval-mode="emit('updateSelectedApprovalMode', $event)"
           @apply-model-effort="emit('applyModelEffort', $event)"
         />
       </div>

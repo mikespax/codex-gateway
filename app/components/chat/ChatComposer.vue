@@ -39,7 +39,6 @@ const {
   removeAttachment,
   runSlashCommand,
   selectSlashCommandIndex,
-  selectedApprovalMode,
   selectedSlashCommandIndex,
   selectedThreadGoal,
   selectedThreadGoalObservedAt,
@@ -53,7 +52,6 @@ const {
   stopSelectedThreadGoal,
   resumeSelectedThreadGoal,
   clearSelectedThreadGoal,
-  setSelectedApprovalMode,
   applySelectedModelEffort,
   slashMenuOpen,
   turnText,
@@ -97,7 +95,6 @@ onMounted(focusDesktopComposer);
     :uploading-attachments="uploadingAttachments"
     :selected-thread-id="selectedThreadId"
     :selected-project-id="selectedProjectId"
-    :selected-approval-mode="selectedApprovalMode"
     :selected-thread-token-usage="selectedThreadTokenUsage"
     :models="models"
     :loading-models="loadingModels"
@@ -134,7 +131,6 @@ onMounted(focusDesktopComposer);
     @file-reference-limit="handleFileReferenceLimit"
     @primary-action="handlePrimaryAction"
     @interrupt-turn="interruptTurn"
-    @update-selected-approval-mode="setSelectedApprovalMode"
     @apply-model-effort="applySelectedModelEffort"
   />
 </template>

@@ -225,10 +225,6 @@ export function useThreadSettingsControls() {
     });
   }
 
-  function setSelectedApprovalMode(value: ApprovalPolicy | "custom") {
-    selectedApprovalMode.value = value;
-  }
-
   return {
     selectedModel,
     selectedEffort,
@@ -248,6 +244,5 @@ export function useThreadSettingsControls() {
     setSelectedModel,
     setSelectedEffort,
     applySelectedModelEffort,
-    setSelectedApprovalMode,
   };
 }

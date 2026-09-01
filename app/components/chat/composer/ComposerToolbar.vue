@@ -9,7 +9,6 @@ import {
   SquareIcon,
 } from "@lucide/vue";
 import type {
-  ApprovalPolicy,
   ModelRecord,
   ReasoningEffort,
   ThreadRuntimeStatus,
@@ -22,14 +21,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@codex-gateway/ui/dropdown-menu";
-import ApprovalPolicyPicker from "@/components/chat/composer/ApprovalPolicyPicker.vue";
 import ContextUsageMeter from "@/components/chat/composer/ContextUsageMeter.vue";
 import ModelEffortPicker from "@/components/chat/composer/ModelEffortPicker.vue";
 
 defineProps<{
   uploadingAttachments: boolean;
   selectedThreadId: string | null;
-  selectedApprovalMode: ApprovalPolicy | "custom";
   selectedThreadTokenUsage: ThreadTokenUsageState | null;
   models: ModelRecord[];
   loadingModels: boolean;
@@ -58,7 +55,6 @@ const emit = defineEmits<{
   primaryAction: [];
   interruptTurn: [];
   applyModelEffort: [selection: { model: string; effort: ReasoningEffort; serviceTier: string }];
-  updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
 }>();
 </script>
 
@@ -106,12 +102,6 @@ const emit = defineEmits<{
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <div class="hidden sm:block">
-        <ApprovalPolicyPicker
-          :model-value="selectedApprovalMode"
-          @update:model-value="emit('updateSelectedApprovalMode', $event)"
-        />
-      </div>
     </div>
     <div class="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
       <ContextUsageMeter :token-usage="selectedThreadTokenUsage" />
