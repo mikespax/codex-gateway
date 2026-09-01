@@ -152,6 +152,80 @@ test("active routine commands and empty reasoning collapse into one working row"
   await expect(page.getByText(/Waiting for approval|等待审批/)).toBeVisible();
 });
 
+test("completed routine commands stay hidden while narrative and file summaries remain", async ({
+  page,
+}) => {
+  await openApp(page);
+  const threadId = "e2e-compact-completed-work-thread";
+  await seedGatewayThread(page, {
+    threadId,
+    currentThread: { id: threadId, name: "Compact Completed Work" },
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "turn-completed-routine",
+            status: "completed",
+            items: [
+              {
+                id: "completed-user",
+                type: "userMessage",
+                content: [{ type: "text", text: "Summarize the completed work" }],
+              },
+              {
+                id: "completed-agent-progress",
+                type: "agentMessage",
+                text: "I checked the relevant files and completed the requested update.",
+              },
+              {
+                id: "completed-command",
+                type: "commandExecution",
+                status: "completed",
+                command: "sed -n '1,240p' app/components/thread/timeline-rows.ts",
+              },
+              {
+                id: "completed-empty-reasoning",
+                type: "reasoning",
+                status: "completed",
+              },
+              {
+                id: "completed-collab-tool",
+                type: "collabAgentToolCall",
+                status: "completed",
+              },
+              {
+                id: "completed-file-change",
+                type: "fileChange",
+                status: "completed",
+                changes: [{ path: "/workspace/src/example.ts", kind: "update" }],
+              },
+              {
+                id: "completed-final",
+                type: "agentMessage",
+                phase: "final_answer",
+                text: "The requested update is complete.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  await openIntermediateSteps(page);
+  await expect(
+    page.getByText("I checked the relevant files and completed the requested update."),
+  ).toBeVisible();
+  await expect(page.getByTestId("file-change-summary")).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /sed -n '1,240p' app\/components\/thread\/timeline-rows\.ts/,
+    }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/Thinking|思考中/)).toHaveCount(0);
+});
+
 test("multiple steers remain visible between their own intermediate sections", async ({ page }) => {
   await openApp(page);
   const threadId = "e2e-steered-intermediate-sections";

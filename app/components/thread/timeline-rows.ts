@@ -184,8 +184,10 @@ function presentIntermediateItems(
   turnIsActive: boolean,
   isLatestSegment: boolean,
 ) {
+  const items = compactCompletedFileChangeRuns(
+    intermediateItems.filter((item) => !isRoutineLiveActivity(item)),
+  );
   if (!turnIsActive) {
-    const items = compactCompletedFileChangeRuns(intermediateItems);
     return {
       items,
       count: items.length,
@@ -193,9 +195,6 @@ function presentIntermediateItems(
     };
   }
 
-  const items = compactCompletedFileChangeRuns(
-    intermediateItems.filter((item) => !isRoutineLiveActivity(item)),
-  );
   const showWorkingStatus = isLatestSegment;
   return {
     items,

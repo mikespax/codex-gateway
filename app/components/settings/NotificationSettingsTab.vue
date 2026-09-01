@@ -6,12 +6,28 @@ import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
 import { Label } from "@codex-gateway/ui/label";
 import { Switch } from "@codex-gateway/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@codex-gateway/ui/select";
+import { Slider } from "@codex-gateway/ui/slider";
 import { useGatewayConfigStore } from "@/stores/gateway-config";
 import { normalizeNotificationSettings } from "@/stores/gateway/config";
 import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
 import {
   isTurnCompletionSoundEnabled,
+  getTurnCompletionSound,
+  getTurnCompletionSoundVolume,
+  MAX_TURN_COMPLETION_SOUND_VOLUME,
+  MIN_TURN_COMPLETION_SOUND_VOLUME,
+  setTurnCompletionSound,
   setTurnCompletionSoundEnabled,
+  setTurnCompletionSoundVolume,
+  TURN_COMPLETION_SOUND_OPTIONS,
+  type TurnCompletionSound,
   testTurnCompletionSound,
 } from "@/utils/turn-completion-sound";
 import {
@@ -30,6 +46,8 @@ const saving = ref(false);
 const error = ref("");
 const form = ref<GatewayNotificationSettings>(normalizeNotificationSettings());
 const completionSoundEnabled = ref(true);
+const completionSound = ref<TurnCompletionSound>("chime");
+const completionSoundVolume = ref(50);
 const completionSoundReady = ref(false);
 const desktopNotificationsSupported = ref(false);
 const desktopNotificationsEnabled = ref(false);
@@ -55,6 +73,8 @@ watch(
 
 onMounted(() => {
   completionSoundEnabled.value = isTurnCompletionSoundEnabled();
+  completionSound.value = getTurnCompletionSound();
+  completionSoundVolume.value = getTurnCompletionSoundVolume();
   completionSoundReady.value = true;
   desktopNotificationsSupported.value = isDesktopNotificationsSupported();
   desktopNotificationsEnabled.value = isDesktopNotificationsEnabled();
@@ -64,6 +84,30 @@ onMounted(() => {
 
 watch(completionSoundEnabled, (enabled) => {
   if (completionSoundReady.value) setTurnCompletionSoundEnabled(enabled);
+});
+
+function updateCompletionSound(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !TURN_COMPLETION_SOUND_OPTIONS.includes(value as TurnCompletionSound)
+  ) {
+    return;
+  }
+  completionSound.value = value as TurnCompletionSound;
+  if (completionSoundReady.value) setTurnCompletionSound(completionSound.value);
+}
+
+const completionSoundVolumeSlider = computed({
+  get: () => [completionSoundVolume.value],
+  set: (value: number[]) => {
+    const next = value[0];
+    if (typeof next !== "number" || !Number.isFinite(next)) return;
+    completionSoundVolume.value = Math.min(
+      MAX_TURN_COMPLETION_SOUND_VOLUME,
+      Math.max(MIN_TURN_COMPLETION_SOUND_VOLUME, Math.round(next)),
+    );
+    if (completionSoundReady.value) setTurnCompletionSoundVolume(completionSoundVolume.value);
+  },
 });
 
 async function playTestSound() {
@@ -125,6 +169,47 @@ async function saveSettings() {
           v-model="completionSoundEnabled"
           :disabled="!completionSoundReady"
         />
+      </div>
+      <div class="mt-4 grid gap-4 border-t border-hairline pt-4">
+        <div class="grid gap-2">
+          <Label for="completion-sound-select">{{ t("app.completionSoundChoice") }}</Label>
+          <p class="text-sm text-ink-secondary">
+            {{ t("app.completionSoundChoiceDescription") }}
+          </p>
+          <Select
+            :model-value="completionSound"
+            data-testid="completion-sound-select"
+            :disabled="!completionSoundReady"
+            @update:model-value="updateCompletionSound"
+          >
+            <SelectTrigger id="completion-sound-select" class="h-10 w-full sm:w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="chime">{{ t("app.completionSoundChime") }}</SelectItem>
+              <SelectItem value="pulse">{{ t("app.completionSoundPulse") }}</SelectItem>
+              <SelectItem value="bell">{{ t("app.completionSoundBell") }}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="grid gap-2">
+          <div class="flex items-center justify-between gap-3">
+            <Label for="completion-sound-volume">{{ t("app.completionSoundVolume") }}</Label>
+            <span class="text-sm text-ink-secondary">
+              {{ t("app.completionSoundVolumeValue", { volume: completionSoundVolume }) }}
+            </span>
+          </div>
+          <Slider
+            id="completion-sound-volume"
+            v-model="completionSoundVolumeSlider"
+            :min="MIN_TURN_COMPLETION_SOUND_VOLUME"
+            :max="MAX_TURN_COMPLETION_SOUND_VOLUME"
+            :step="1"
+            :disabled="!completionSoundReady"
+            data-testid="completion-sound-volume"
+            aria-label="completion sound volume"
+          />
+        </div>
       </div>
       <div class="mt-3 flex justify-end">
         <Button

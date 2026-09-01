@@ -7,6 +7,7 @@ import { useChatWorkspaceState } from "../chat-workspace-state";
 import { fileWorkspaceScopeKey } from "@/stores/file-workspace";
 import { useGatewayFileWorkspaceStore } from "@/stores/file-workspace";
 import { workspaceLayoutScopeKey } from "@/stores/gateway-workspace-layout";
+import { titleForThread } from "@/stores/gateway/thread-utils/identity";
 import MobileWorkspaceHeader from "../MobileWorkspaceHeader.vue";
 import { createDockTabMenu } from "./actions";
 import { WORKSPACE_DOCK_UI_CONTEXT, WORKSPACE_FILES_PANEL_CONTEXT } from "./context";
@@ -50,7 +51,11 @@ const fileRequestScopeKey = computed(() =>
 const filesPanelOpen = computed(
   () => fileWorkspace.workspaceOpenRequest?.scopeKey === fileRequestScopeKey.value,
 );
+const agentPanelTitle = computed(() =>
+  workspace.currentThread.value ? titleForThread(workspace.currentThread.value) : t("app.agentTab"),
+);
 const panels = useWorkspaceDockPanels({
+  agentPanelTitle,
   terminalPanels,
   subAgentPanels,
   browserPanels,
@@ -61,6 +66,7 @@ const panels = useWorkspaceDockPanels({
   scopeKey,
 });
 const panelIds = computed(() => [
+  agentPanelTitle.value,
   filesPanelOpen.value,
   terminalPanels.value.map(({ id }) => id),
   subAgentPanels.value.map(({ id }) => id),

@@ -1,5 +1,18 @@
 const COMPLETION_SOUND_PREFERENCE_KEY = "codex-gateway.desktop-completion-sound";
+const COMPLETION_SOUND_TYPE_SUFFIX = "desktop-completion-sound-type";
+const COMPLETION_SOUND_VOLUME_SUFFIX = "desktop-completion-sound-volume";
+const AUTH_USERNAME_KEY = "codex-gateway-auth-token:username";
 const MAX_PLAYED_NOTIFICATION_KEYS = 128;
+
+export const MIN_TURN_COMPLETION_SOUND_VOLUME = 0;
+export const MAX_TURN_COMPLETION_SOUND_VOLUME = 100;
+export const DEFAULT_TURN_COMPLETION_SOUND_VOLUME = 50;
+export const DEFAULT_TURN_COMPLETION_SOUND = "chime";
+
+export const TURN_COMPLETION_SOUND_OPTIONS = ["chime", "pulse", "bell"] as const;
+export type TurnCompletionSound = (typeof TURN_COMPLETION_SOUND_OPTIONS)[number];
+
+const TURN_COMPLETION_SOUND_SET: ReadonlySet<string> = new Set(TURN_COMPLETION_SOUND_OPTIONS);
 
 let audioContext: AudioContext | null = null;
 let unlockListenersInstalled = false;
@@ -7,6 +20,53 @@ const playedNotificationKeys = new Set<string>();
 
 function isBrowser() {
   return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
+function accountStorageKey(suffix: string) {
+  if (!isBrowser()) return `codex-gateway:signed-out:${suffix}`;
+  try {
+    const username = window.localStorage.getItem(AUTH_USERNAME_KEY)?.trim() ?? "";
+    const namespace = username === "" ? "signed-out" : encodeURIComponent(username);
+    return `codex-gateway:${namespace}:${suffix}`;
+  } catch {
+    return `codex-gateway:signed-out:${suffix}`;
+  }
+}
+
+function readPreference(suffix: string, fallback: string, legacyKey?: string) {
+  if (!isBrowser()) return fallback;
+  try {
+    const accountValue = window.localStorage.getItem(accountStorageKey(suffix));
+    if (accountValue !== null) return accountValue;
+    if (legacyKey !== undefined) {
+      const legacyValue = window.localStorage.getItem(legacyKey);
+      if (legacyValue !== null) return legacyValue;
+    }
+  } catch {
+    // A locked-down browser may deny local storage.
+  }
+  return fallback;
+}
+
+function writePreference(suffix: string, value: string) {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(accountStorageKey(suffix), value);
+  } catch {
+    // A locked-down browser may deny local storage.
+  }
+}
+
+function isTurnCompletionSound(value: string): value is TurnCompletionSound {
+  return TURN_COMPLETION_SOUND_SET.has(value);
+}
+
+function clampVolume(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_TURN_COMPLETION_SOUND_VOLUME;
+  return Math.min(
+    MAX_TURN_COMPLETION_SOUND_VOLUME,
+    Math.max(MIN_TURN_COMPLETION_SOUND_VOLUME, Math.round(value)),
+  );
 }
 
 function getAudioContext() {
@@ -22,21 +82,33 @@ function getAudioContext() {
 }
 
 export function isTurnCompletionSoundEnabled() {
-  if (!isBrowser()) return true;
-  try {
-    return window.localStorage.getItem(COMPLETION_SOUND_PREFERENCE_KEY) !== "0";
-  } catch {
-    return true;
-  }
+  return readPreference("desktop-completion-sound", "1", COMPLETION_SOUND_PREFERENCE_KEY) !== "0";
 }
 
 export function setTurnCompletionSoundEnabled(enabled: boolean) {
-  if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(COMPLETION_SOUND_PREFERENCE_KEY, enabled ? "1" : "0");
-  } catch {
-    // A locked-down browser may deny local storage. The in-memory default remains enabled.
+  writePreference("desktop-completion-sound", enabled ? "1" : "0");
+}
+
+export function getTurnCompletionSound(): TurnCompletionSound {
+  const value = readPreference(COMPLETION_SOUND_TYPE_SUFFIX, DEFAULT_TURN_COMPLETION_SOUND);
+  return isTurnCompletionSound(value) ? value : DEFAULT_TURN_COMPLETION_SOUND;
+}
+
+export function setTurnCompletionSound(value: unknown) {
+  if (typeof value === "string" && isTurnCompletionSound(value)) {
+    writePreference(COMPLETION_SOUND_TYPE_SUFFIX, value);
   }
+}
+
+export function getTurnCompletionSoundVolume() {
+  const stored = Number(
+    readPreference(COMPLETION_SOUND_VOLUME_SUFFIX, String(DEFAULT_TURN_COMPLETION_SOUND_VOLUME)),
+  );
+  return clampVolume(stored);
+}
+
+export function setTurnCompletionSoundVolume(value: number) {
+  writePreference(COMPLETION_SOUND_VOLUME_SUFFIX, String(clampVolume(value)));
 }
 
 /**
@@ -68,7 +140,7 @@ export async function unlockTurnCompletionSound() {
   }
 }
 
-/** Plays a short, quiet two-note chime and returns whether it was scheduled. */
+/** Plays the selected short sound and returns whether it was scheduled. */
 export function playTurnCompletionSound(notificationKey: string) {
   if (
     !isBrowser() ||
@@ -82,8 +154,17 @@ export function playTurnCompletionSound(notificationKey: string) {
   if (context === null || context.state !== "running") return false;
 
   const start = context.currentTime;
-  scheduleTone(context, 660, start, 0.14);
-  scheduleTone(context, 880, start + 0.12, 0.24);
+  const peakGain = 0.08 * (getTurnCompletionSoundVolume() / MAX_TURN_COMPLETION_SOUND_VOLUME);
+  for (const tone of soundPattern(getTurnCompletionSound())) {
+    scheduleTone(
+      context,
+      tone.frequency,
+      start + tone.offset,
+      tone.duration,
+      tone.waveform,
+      peakGain,
+    );
+  }
   playedNotificationKeys.add(notificationKey);
   if (playedNotificationKeys.size > MAX_PLAYED_NOTIFICATION_KEYS) {
     const oldest = playedNotificationKeys.values().next().value;
@@ -97,13 +178,49 @@ export async function testTurnCompletionSound() {
   return playTurnCompletionSound(`settings-test-${Date.now()}`);
 }
 
-function scheduleTone(context: AudioContext, frequency: number, start: number, duration: number) {
+type SoundTone = {
+  frequency: number;
+  offset: number;
+  duration: number;
+  waveform: OscillatorType;
+};
+
+function soundPattern(sound: TurnCompletionSound): SoundTone[] {
+  switch (sound) {
+    case "pulse":
+      return [
+        { frequency: 520, offset: 0, duration: 0.1, waveform: "square" },
+        { frequency: 520, offset: 0.14, duration: 0.16, waveform: "square" },
+      ];
+    case "bell":
+      return [
+        { frequency: 523, offset: 0, duration: 0.16, waveform: "sine" },
+        { frequency: 659, offset: 0.11, duration: 0.2, waveform: "sine" },
+        { frequency: 784, offset: 0.22, duration: 0.3, waveform: "sine" },
+      ];
+    case "chime":
+    default:
+      return [
+        { frequency: 660, offset: 0, duration: 0.14, waveform: "sine" },
+        { frequency: 880, offset: 0.12, duration: 0.24, waveform: "sine" },
+      ];
+  }
+}
+
+function scheduleTone(
+  context: AudioContext,
+  frequency: number,
+  start: number,
+  duration: number,
+  waveform: OscillatorType,
+  peakGain: number,
+) {
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  oscillator.type = "sine";
+  oscillator.type = waveform;
   oscillator.frequency.setValueAtTime(frequency, start);
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(0.08, start + 0.015);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain), start + 0.015);
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
   oscillator.connect(gain);
   gain.connect(context.destination);

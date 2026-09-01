@@ -58,6 +58,9 @@ test("keeps Files hidden until a file is explicitly opened and shows usage on de
 
   await expect(page.getByTestId("codex-usage-badge")).toHaveText("69%");
   await expect(
+    page.locator('[data-testid="workspace-dock-tab"][data-panel-kind="agent"]'),
+  ).toHaveAttribute("data-panel-title", "Desktop Workspace Header");
+  await expect(
     page.locator('[data-testid="workspace-dock-tab"][data-panel-kind="files"]'),
   ).toHaveCount(0);
 });

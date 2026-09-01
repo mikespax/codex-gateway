@@ -27,6 +27,7 @@ interface PanelDefinition {
 const DEFAULT_GROUP_ID = "workspace-default-group";
 
 export function useWorkspaceDockPanels(options: {
+  agentPanelTitle: ComputedRef<string>;
   terminalPanels: ComputedRef<Array<{ id: string; session: { sessionId: string; title: string } }>>;
   subAgentPanels: ComputedRef<
     Array<{ id: string; hostId: number; threadId: string; title: string }>
@@ -51,7 +52,7 @@ export function useWorkspaceDockPanels(options: {
     const panels: PanelDefinition[] = [
       {
         id: AGENT_WORKSPACE_PANEL_ID,
-        title: t("app.agentTab"),
+        title: options.agentPanelTitle.value,
         component: workspacePanelPolicy("agent").component,
         params: { kind: "agent" },
       },
