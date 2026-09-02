@@ -7,6 +7,7 @@ import {
 } from "~~/shared/gateway-errors";
 import { userStore } from "../auth/users";
 import { hostRuntimeSupervisor } from "../runtime/host-runtime-supervisor";
+import { hostMetricsManager } from "../infra/host-services";
 import { projectStore } from "../state/projects";
 import {
   buildGatewayMemoryState,
@@ -86,6 +87,7 @@ export function ensureUserConfigLoaded(userId: number) {
   nextState.configLoaded = true;
   replaceCurrentGatewayMemoryState(nextState);
   hostRuntimeSupervisor.syncCurrentUserConfig();
+  for (const host of nextState.hosts) hostMetricsManager.ensureCollector(userId, host);
 }
 
 export function saveCurrentUserConfig(event: H3Event) {

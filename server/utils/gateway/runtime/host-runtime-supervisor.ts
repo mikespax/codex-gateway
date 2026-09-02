@@ -22,6 +22,7 @@ import {
 import { hostSessionEvents, type HostSessionClosedEvent } from "./host-session-events";
 import { activeMainThreadMonitor } from "./active-main-thread-monitor";
 import { threadBroker } from "./broker";
+import { hostMetricsManager } from "../infra/host-services";
 
 class HostRuntimeSupervisor {
   private readonly slots = new Map<string, HostRuntimeSlot>();
@@ -88,6 +89,9 @@ class HostRuntimeSupervisor {
         this.syncUserConfig(user.id, {
           hosts: currentGatewayMemoryState().hosts,
         });
+        for (const host of currentGatewayMemoryState().hosts) {
+          hostMetricsManager.ensureCollector(user.id, host);
+        }
       });
     }
   }
