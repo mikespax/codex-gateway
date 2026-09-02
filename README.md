@@ -248,8 +248,10 @@ configuration directory before starting. It defaults the E2E build container to 
 space to `6144` MiB; override `E2E_BUILD_MEMORY_LIMIT` and `E2E_BUILD_NODE_OPTIONS` when needed.
 Docker Desktop's configured VM memory is the effective limit, not the Mac's physical RAM. The
 Mac runner should therefore have at least 12 GiB assigned to Docker Desktop for the default
-override. BuildKit persists only disposable pnpm and Vite/Nuxt transform caches; `.nuxt`, `.output`,
-test data, and Codex configuration remain run-specific.
+override. It also enables Docker Compose Bake by default for parallel cache-aware builds; set
+`COMPOSE_BAKE=false` if Docker Desktop is configured without Bake. BuildKit persists only
+disposable pnpm and Vite/Nuxt transform caches; `.nuxt`, `.output`, test data, and Codex
+configuration remain run-specific.
 
 Environment variables:
 

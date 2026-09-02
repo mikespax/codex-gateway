@@ -47,4 +47,7 @@ echo "Running containerized Gateway E2E from $repo_dir"
 echo "Using disposable build cache and Mac Docker memory override: 8g / 6144 MiB V8 heap"
 export E2E_BUILD_MEMORY_LIMIT="${E2E_BUILD_MEMORY_LIMIT:-8g}"
 export E2E_BUILD_NODE_OPTIONS="${E2E_BUILD_NODE_OPTIONS:---max-old-space-size=6144}"
+# Docker Desktop's BuildKit Bake path parallelizes the unchanged dependency/build graph while
+# retaining the same Compose topology and cache mounts.
+export COMPOSE_BAKE="${COMPOSE_BAKE:-true}"
 exec "$repo_dir/tests/e2e/run-in-containers.sh" "$@"
