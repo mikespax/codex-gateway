@@ -130,7 +130,11 @@ export function statusLabelKey(status: string) {
 }
 
 export function selectedRowClass(selected: boolean) {
-  return selected ? "bg-primary/10 text-ink shadow-[inset_3px_0_0_var(--primary)]" : "";
+  return selected ? "gateway-sidebar-row-selected text-ink" : "";
+}
+
+export function completionAttentionClass(attention: boolean) {
+  return attention ? "gateway-sidebar-row-attention" : "";
 }
 
 export function hostConnectionClass(status: string) {

@@ -9,8 +9,15 @@ export const MAX_TURN_COMPLETION_SOUND_VOLUME = 100;
 export const DEFAULT_TURN_COMPLETION_SOUND_VOLUME = 50;
 export const DEFAULT_TURN_COMPLETION_SOUND = "chime";
 
-export const TURN_COMPLETION_SOUND_OPTIONS = ["chime", "pulse", "bell"] as const;
+export const TURN_COMPLETION_SOUND_OPTIONS = [
+  "chime",
+  "pulse",
+  "bell",
+  "marimba",
+  "signal",
+] as const;
 export type TurnCompletionSound = (typeof TURN_COMPLETION_SOUND_OPTIONS)[number];
+export const TURN_COMPLETION_SOUND_VOLUME_PRESETS = [0, 25, 50, 75, 100] as const;
 
 const TURN_COMPLETION_SOUND_SET: ReadonlySet<string> = new Set(TURN_COMPLETION_SOUND_OPTIONS);
 
@@ -197,6 +204,18 @@ function soundPattern(sound: TurnCompletionSound): SoundTone[] {
         { frequency: 523, offset: 0, duration: 0.16, waveform: "sine" },
         { frequency: 659, offset: 0.11, duration: 0.2, waveform: "sine" },
         { frequency: 784, offset: 0.22, duration: 0.3, waveform: "sine" },
+      ];
+    case "marimba":
+      return [
+        { frequency: 392, offset: 0, duration: 0.14, waveform: "triangle" },
+        { frequency: 523, offset: 0.1, duration: 0.16, waveform: "triangle" },
+        { frequency: 659, offset: 0.2, duration: 0.24, waveform: "triangle" },
+      ];
+    case "signal":
+      return [
+        { frequency: 740, offset: 0, duration: 0.08, waveform: "sawtooth" },
+        { frequency: 587, offset: 0.11, duration: 0.08, waveform: "sawtooth" },
+        { frequency: 740, offset: 0.22, duration: 0.18, waveform: "sawtooth" },
       ];
     case "chime":
     default:

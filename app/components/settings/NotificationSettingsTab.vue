@@ -27,6 +27,7 @@ import {
   setTurnCompletionSoundEnabled,
   setTurnCompletionSoundVolume,
   TURN_COMPLETION_SOUND_OPTIONS,
+  TURN_COMPLETION_SOUND_VOLUME_PRESETS,
   type TurnCompletionSound,
   testTurnCompletionSound,
 } from "@/utils/turn-completion-sound";
@@ -95,6 +96,11 @@ function updateCompletionSound(value: unknown) {
   }
   completionSound.value = value as TurnCompletionSound;
   if (completionSoundReady.value) setTurnCompletionSound(completionSound.value);
+}
+
+function setCompletionSoundVolume(value: number) {
+  completionSoundVolume.value = value;
+  if (completionSoundReady.value) setTurnCompletionSoundVolume(value);
 }
 
 const completionSoundVolumeSlider = computed({
@@ -189,6 +195,8 @@ async function saveSettings() {
               <SelectItem value="chime">{{ t("app.completionSoundChime") }}</SelectItem>
               <SelectItem value="pulse">{{ t("app.completionSoundPulse") }}</SelectItem>
               <SelectItem value="bell">{{ t("app.completionSoundBell") }}</SelectItem>
+              <SelectItem value="marimba">{{ t("app.completionSoundMarimba") }}</SelectItem>
+              <SelectItem value="signal">{{ t("app.completionSoundSignal") }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -207,8 +215,32 @@ async function saveSettings() {
             :step="1"
             :disabled="!completionSoundReady"
             data-testid="completion-sound-volume"
-            aria-label="completion sound volume"
+            :aria-label="t('app.completionSoundVolume')"
+            :aria-valuetext="t('app.completionSoundVolumeValue', { volume: completionSoundVolume })"
           />
+          <div class="flex items-center justify-between gap-2 text-xs text-ink-muted">
+            <span>{{ t("app.completionSoundVolumeMin") }}</span>
+            <span>{{ t("app.completionSoundVolumeMax") }}</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5" :aria-label="t('app.completionSoundVolumePresets')">
+            <Button
+              v-for="preset in TURN_COMPLETION_SOUND_VOLUME_PRESETS"
+              :key="preset"
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-7 px-2 text-xs"
+              :class="
+                completionSoundVolume === preset ? 'border-primary bg-primary/15 text-primary' : ''
+              "
+              :data-testid="`completion-sound-volume-preset-${preset}`"
+              :aria-pressed="completionSoundVolume === preset"
+              :disabled="!completionSoundReady"
+              @click="setCompletionSoundVolume(preset)"
+            >
+              {{ t("app.completionSoundVolumePreset", { volume: preset }) }}
+            </Button>
+          </div>
         </div>
       </div>
       <div class="mt-3 flex justify-end">

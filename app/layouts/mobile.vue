@@ -13,12 +13,14 @@ import {
   SheetTitle,
 } from "@codex-gateway/ui/sheet";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
+import { useGatewayConfigStore } from "@/stores/gateway-config";
 import { projectById } from "@/stores/gateway-catalog/selectors";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { titleForThread } from "@/stores/gateway/thread-utils/identity";
 
 const catalog = useGatewayCatalogStore();
+const config = useGatewayConfigStore();
 const navigation = useGatewayNavigationStore();
 const { projects } = storeToRefs(catalog);
 const { selectedThreadId, selectedHostId, selectedProjectId } = storeToRefs(navigation);
@@ -34,6 +36,23 @@ const mobileTitle = computed(() => {
 
 watch([selectedHostId, selectedProjectId, selectedThreadId], () => {
   sidebarOpen.value = false;
+});
+
+watch(sidebarOpen, (open) => {
+  const hostId = selectedHostId.value;
+  if (!open || hostId === null) return;
+
+  // The mobile Sheet stays mounted between opens. Refresh the host overview when it becomes
+  // visible so chats created or completed in another desktop/session are reflected without
+  // mutating the stable recent-list ordering during a running turn.
+  void Promise.all([config.refreshPinnedThreads(), navigation.refreshHostProjects(hostId)])
+    .then(async () => {
+      if (selectedHostId.value !== hostId || selectedProjectId.value === null) return;
+      await navigation.listThreads();
+    })
+    .catch(() => {
+      // The sidebar remains usable with its last known data when a background refresh fails.
+    });
 });
 </script>
 
@@ -56,7 +75,10 @@ watch([selectedHostId, selectedProjectId, selectedThreadId], () => {
           >
             <MenuIcon class="size-5" />
           </Button>
-          <SheetContent side="left" class="w-[min(88vw,24rem)] p-0" :show-close-button="false">
+          <SheetContent
+            side="left"
+            class="w-[min(92vw,26rem)] border-r border-hairline bg-canvas-soft p-0 shadow-2xl"
+          >
             <SheetHeader class="sr-only">
               <SheetTitle>{{ $t("app.sidebar") }}</SheetTitle>
               <SheetDescription>{{ $t("app.sidebarDescription") }}</SheetDescription>

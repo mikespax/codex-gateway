@@ -282,6 +282,7 @@ export function normalizePinnedThreads(threads: PinnedThreadRecord[]) {
     subtitle: trimmedOrNull(thread.subtitle),
     projectName: trimmedOrNull(thread.projectName),
     updatedAt: thread.updatedAt ?? null,
+    inactive: thread.inactive === true,
   }));
 }
 

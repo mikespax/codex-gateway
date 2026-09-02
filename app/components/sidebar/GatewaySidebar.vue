@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronDownIcon, SettingsIcon } from "@lucide/vue";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { Button } from "@codex-gateway/ui/button";
 import {
   Dialog,
@@ -14,6 +14,7 @@ import BrowserOpenDialog from "@/components/browser/BrowserOpenDialog.vue";
 import { useLongPressContextMenu } from "@/composables/interactions/useLongPressContextMenu";
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
+import { useGatewayConfigStore } from "@/stores/gateway-config";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import AddProjectDialog from "./AddProjectDialog.vue";
@@ -36,6 +37,7 @@ const PINNED_GROUPS_KEY = "codex-gateway-pinned-groups";
 const SIDEBAR_SECTIONS_KEY = "codex-gateway-sidebar-sections";
 
 const catalog = useGatewayCatalogStore();
+const config = useGatewayConfigStore();
 const navigation = useGatewayNavigationStore();
 const threadView = useGatewayThreadViewStore();
 withDefaults(defineProps<{ workspaceToolbar?: boolean }>(), { workspaceToolbar: true });
@@ -66,11 +68,12 @@ const activePinnedExpanded = ref(true);
 const inactivePinnedExpanded = ref(false);
 const recentChatsExpanded = ref(true);
 const hostsExpanded = ref(true);
-const activePinnedThreads = computed(() =>
-  pinnedThreads.value.filter((thread) => !inactivePinnedKeys.value[pinnedThreadKey(thread)]),
-);
+let migratingLegacyPinnedGroups = false;
 const inactivePinnedThreads = computed(() =>
-  pinnedThreads.value.filter((thread) => inactivePinnedKeys.value[pinnedThreadKey(thread)]),
+  pinnedThreads.value.filter((thread) => isInactivePinnedThread(thread)),
+);
+const activePinnedThreads = computed(() =>
+  pinnedThreads.value.filter((thread) => !isInactivePinnedThread(thread)),
 );
 const hostTreeController = computed<HostTreeController>(() => ({
   hosts: sidebarTree.hosts.value,
@@ -113,15 +116,16 @@ function persistSidebarSections() {
   );
 }
 
-function movePinnedThread(thread: PinnedThreadRecord, inactive: boolean) {
-  const key = pinnedThreadKey(thread);
-  if (inactive) inactivePinnedKeys.value = { ...inactivePinnedKeys.value, [key]: true };
-  else {
-    const next = { ...inactivePinnedKeys.value };
-    delete next[key];
-    inactivePinnedKeys.value = next;
+function isInactivePinnedThread(thread: PinnedThreadRecord) {
+  return thread.inactive === true || inactivePinnedKeys.value[pinnedThreadKey(thread)] === true;
+}
+
+async function movePinnedThread(thread: PinnedThreadRecord, inactive: boolean) {
+  try {
+    await config.setPinnedThreadInactive(thread, inactive);
+  } catch (error) {
+    console.warn("[gateway] failed to update pinned thread group", error);
   }
-  localStorage.setItem(PINNED_GROUPS_KEY, JSON.stringify(inactivePinnedKeys.value));
 }
 
 onMounted(() => {
@@ -129,15 +133,55 @@ onMounted(() => {
     inactivePinnedKeys.value = JSON.parse(localStorage.getItem(PINNED_GROUPS_KEY) ?? "{}") ?? {};
     const sections = JSON.parse(localStorage.getItem(SIDEBAR_SECTIONS_KEY) ?? "null");
     if (sections && typeof sections === "object") {
-      if (typeof sections.activePinnedExpanded === "boolean") activePinnedExpanded.value = sections.activePinnedExpanded;
-      if (typeof sections.inactivePinnedExpanded === "boolean") inactivePinnedExpanded.value = sections.inactivePinnedExpanded;
-      if (typeof sections.recentChatsExpanded === "boolean") recentChatsExpanded.value = sections.recentChatsExpanded;
+      if (typeof sections.activePinnedExpanded === "boolean")
+        activePinnedExpanded.value = sections.activePinnedExpanded;
+      if (typeof sections.inactivePinnedExpanded === "boolean")
+        inactivePinnedExpanded.value = sections.inactivePinnedExpanded;
+      if (typeof sections.recentChatsExpanded === "boolean")
+        recentChatsExpanded.value = sections.recentChatsExpanded;
       if (typeof sections.hostsExpanded === "boolean") hostsExpanded.value = sections.hostsExpanded;
     }
+    if (pinnedThreads.value.length > 0) void migrateLegacyPinnedGroups();
   } catch {
     inactivePinnedKeys.value = {};
   }
 });
+
+watch(
+  pinnedThreads,
+  (threads) => {
+    // Bootstrap loads the server config after the layout mounts. Wait for that first non-empty
+    // projection before migrating the old per-device grouping, otherwise a mobile first paint
+    // could clear the legacy map before the server pins arrive.
+    if (threads.length > 0) void migrateLegacyPinnedGroups();
+  },
+  { deep: true },
+);
+
+async function migrateLegacyPinnedGroups() {
+  if (migratingLegacyPinnedGroups) return;
+  const legacyKeys = new Set(
+    Object.entries(inactivePinnedKeys.value)
+      .filter(([, inactive]) => inactive === true)
+      .map(([key]) => key),
+  );
+  if (legacyKeys.size === 0 || pinnedThreads.value.length === 0) return;
+
+  migratingLegacyPinnedGroups = true;
+  try {
+    for (const thread of pinnedThreads.value) {
+      if (!legacyKeys.has(pinnedThreadKey(thread)) || thread.inactive === true) continue;
+      if (!(await config.setPinnedThreadInactive(thread, true))) return;
+    }
+  } catch {
+    // Keep the legacy map as a local fallback if this account cannot be updated right now.
+    return;
+  } finally {
+    migratingLegacyPinnedGroups = false;
+  }
+  localStorage.removeItem(PINNED_GROUPS_KEY);
+  inactivePinnedKeys.value = {};
+}
 
 defineOptions({
   inheritAttrs: false,
@@ -167,6 +211,15 @@ async function openHostMonitor(hostId: number) {
     v-bind="$attrs"
     class="relative flex h-full min-h-0 flex-col border-r border-hairline bg-canvas-soft"
   >
+    <div
+      v-if="!workspaceToolbar"
+      class="flex min-h-14 shrink-0 items-center border-b border-hairline bg-canvas-soft/95 px-4 pr-14 backdrop-blur"
+    >
+      <div class="min-w-0">
+        <p class="truncate text-sm font-semibold text-ink">Codex Gateway</p>
+        <p class="truncate text-xs text-ink-muted">{{ selectedHostTitle }}</p>
+      </div>
+    </div>
     <SidebarWorkspaceToolbar
       v-if="workspaceToolbar"
       :title="selectedHostTitle"
@@ -185,10 +238,19 @@ async function openHostMonitor(hostId: number) {
             <button
               class="flex h-8 w-full items-center justify-between gap-2 rounded px-2 pb-2 text-left text-sm text-ink-muted hover:bg-surface"
               :aria-expanded="activePinnedExpanded"
-              @click="activePinnedExpanded = !activePinnedExpanded; persistSidebarSections()"
+              @click="
+                activePinnedExpanded = !activePinnedExpanded;
+                persistSidebarSections();
+              "
             >
-              <span>Active <span class="text-xs text-ink-faint">({{ activePinnedThreads.length }})</span></span>
-              <ChevronDownIcon class="size-4 transition-transform" :class="{ '-rotate-90': !activePinnedExpanded }" />
+              <span
+                >Active
+                <span class="text-xs text-ink-faint">({{ activePinnedThreads.length }})</span></span
+              >
+              <ChevronDownIcon
+                class="size-4 transition-transform"
+                :class="{ '-rotate-90': !activePinnedExpanded }"
+              />
             </button>
             <PinnedThreadList
               v-if="activePinnedExpanded"
@@ -212,10 +274,21 @@ async function openHostMonitor(hostId: number) {
             <button
               class="flex h-8 w-full items-center justify-between gap-2 rounded px-2 pb-2 text-left text-sm text-ink-muted hover:bg-surface"
               :aria-expanded="inactivePinnedExpanded"
-              @click="inactivePinnedExpanded = !inactivePinnedExpanded; persistSidebarSections()"
+              @click="
+                inactivePinnedExpanded = !inactivePinnedExpanded;
+                persistSidebarSections();
+              "
             >
-              <span>Inactive <span class="text-xs text-ink-faint">({{ inactivePinnedThreads.length }})</span></span>
-              <ChevronDownIcon class="size-4 transition-transform" :class="{ '-rotate-90': !inactivePinnedExpanded }" />
+              <span
+                >Inactive
+                <span class="text-xs text-ink-faint"
+                  >({{ inactivePinnedThreads.length }})</span
+                ></span
+              >
+              <ChevronDownIcon
+                class="size-4 transition-transform"
+                :class="{ '-rotate-90': !inactivePinnedExpanded }"
+              />
             </button>
             <PinnedThreadList
               v-if="inactivePinnedExpanded"
@@ -244,17 +317,26 @@ async function openHostMonitor(hostId: number) {
             @open="recentActivity.openRecentThread"
             @pin="recentActivity.pinRecentThread"
             @rename="threadRename.startRename"
-            @toggle="recentChatsExpanded = !recentChatsExpanded; persistSidebarSections()"
+            @toggle="
+              recentChatsExpanded = !recentChatsExpanded;
+              persistSidebarSections();
+            "
           />
 
           <section class="flex min-w-0 max-w-full flex-col overflow-hidden">
             <button
               class="flex h-8 w-full items-center justify-between gap-2 rounded px-2 pb-2 text-left text-sm text-ink-muted hover:bg-surface"
               :aria-expanded="hostsExpanded"
-              @click="hostsExpanded = !hostsExpanded; persistSidebarSections()"
+              @click="
+                hostsExpanded = !hostsExpanded;
+                persistSidebarSections();
+              "
             >
               <span>{{ $t("app.hosts") }}</span>
-              <ChevronDownIcon class="size-4 transition-transform" :class="{ '-rotate-90': !hostsExpanded }" />
+              <ChevronDownIcon
+                class="size-4 transition-transform"
+                :class="{ '-rotate-90': !hostsExpanded }"
+              />
             </button>
             <HostTree v-if="hostsExpanded" :controller="hostTreeController" :show-header="false" />
           </section>

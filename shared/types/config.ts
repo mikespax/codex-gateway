@@ -8,6 +8,8 @@ export interface PinnedThreadRecord {
   subtitle?: string | null;
   projectName?: string | null;
   updatedAt?: number | null;
+  /** True when the user keeps this pinned thread out of the active sidebar group. */
+  inactive?: boolean;
 }
 
 export interface BarkNotificationSettings {
