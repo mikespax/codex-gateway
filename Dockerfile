@@ -28,9 +28,11 @@ COPY scripts ./scripts
 COPY shared ./shared
 COPY server ./server
 COPY app ./app
-# Nuxt 4.5.1 buildCache can restore the Vue bundle without wiring its renderer virtual modules
-# (nuxt/nuxt#35894). Keep dependency layers cached, but always produce a complete app bundle.
-RUN pnpm exec nuxt build
+# Keep disposable Vite/Nuxt transform caches between builds without reusing .nuxt or .output.
+# Nuxt's experimental buildCache remains disabled because it can restore a Vue bundle without
+# wiring its renderer virtual modules in Nuxt 4.5.1 (nuxt/nuxt#35894).
+RUN --mount=type=cache,id=codex-gateway-nuxt-vite-cache,target=/app/node_modules/.cache,sharing=locked \
+    pnpm exec nuxt build
 
 FROM node:${NODE_VERSION} AS runner
 ARG BUILD_SHA=unknown

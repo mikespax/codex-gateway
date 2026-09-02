@@ -228,6 +228,29 @@ pnpm build
 pnpm test:e2e
 ```
 
+### Mac E2E runner
+
+The containerized E2E suite can run from a local Mac checkout, keeping its real Docker SSH
+targets, Gateway server, preview ingress, and Playwright topology intact. This is opt-in; it does
+not use a remote Docker socket or modify the VPS. After pushing the branch to the fork, clone it
+on the Mac and run:
+
+```bash
+git clone --recurse-submodules --branch spax/customizations-20260824 \
+  https://github.com/mikespax/codex-gateway-extended.git \
+  ~/src/codex-gateway-extended
+cd ~/src/codex-gateway-extended
+scripts/run-e2e-on-mac.sh
+```
+
+The wrapper checks for a real Mac checkout, Docker Desktop, Compose v2, and a readable Codex
+configuration directory before starting. It defaults the E2E build container to `8g` and V8 old
+space to `6144` MiB; override `E2E_BUILD_MEMORY_LIMIT` and `E2E_BUILD_NODE_OPTIONS` when needed.
+Docker Desktop's configured VM memory is the effective limit, not the Mac's physical RAM. The
+Mac runner should therefore have at least 12 GiB assigned to Docker Desktop for the default
+override. BuildKit persists only disposable pnpm and Vite/Nuxt transform caches; `.nuxt`, `.output`,
+test data, and Codex configuration remain run-specific.
+
 Environment variables:
 
 | Variable                      | Required          | Description                                                                                             |
