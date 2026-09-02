@@ -21,6 +21,90 @@ test("collapses the desktop sidebar and restores the saved layout", async ({ pag
   await expect(page.getByTestId("desktop-sidebar-collapse")).toBeVisible();
 });
 
+test("uses the selected host's most recently used project for a new thread", async ({ page }) => {
+  await openApp(page);
+  const host = {
+    ...defaultGatewayHost(111),
+    name: "Target Host",
+    sshHost: "target.example.internal",
+  };
+  const currentHost = {
+    ...defaultGatewayHost(112),
+    name: "Current Host",
+    sshHost: "current.example.internal",
+  };
+  const firstProject = {
+    ...defaultGatewayProject(host.id, 211),
+    name: "Older Project",
+    remotePath: "/workspace/older",
+  };
+  const recentProject = {
+    ...defaultGatewayProject(host.id, 212),
+    name: "Recent Project",
+    remotePath: "/workspace/recent",
+  };
+  const currentProject = {
+    ...defaultGatewayProject(currentHost.id, 213),
+    name: "Current Project",
+    remotePath: "/workspace/current",
+  };
+
+  await page.evaluate(
+    ({ host, currentHost, firstProject, recentProject, currentProject }) => {
+      const driver = window.__codexGatewayE2e;
+      if (!driver) throw new Error("Gateway E2E driver is unavailable");
+      const { activity, catalog, navigation, views } = driver;
+      catalog.hosts = [currentHost, host];
+      catalog.projects = [firstProject, recentProject, currentProject];
+      navigation.selectedHostId = currentHost.id;
+      navigation.selectedProjectId = currentProject.id;
+      navigation.selectedThreadId = null;
+      activity.ingestMetadata(
+        host.id,
+        [
+          {
+            id: "older-thread",
+            title: "Older thread",
+            projectId: firstProject.id,
+            cwd: firstProject.remotePath,
+            parentThreadId: null,
+            agentNickname: null,
+            agentRole: null,
+            name: null,
+            preview: null,
+            recencyAt: null,
+            updatedAt: 10,
+          },
+          {
+            id: "recent-thread",
+            title: "Recent thread",
+            projectId: recentProject.id,
+            cwd: recentProject.remotePath,
+            parentThreadId: null,
+            agentNickname: null,
+            agentRole: null,
+            name: null,
+            preview: null,
+            recencyAt: null,
+            updatedAt: 20,
+          },
+        ],
+        catalog.projects,
+      );
+      views.startThread = async (_options, context) => {
+        window.__codexGatewayNewThreadContext = context ?? null;
+      };
+    },
+    { host, currentHost, firstProject, recentProject, currentProject },
+  );
+
+  await page.getByTestId("new-thread-button").click();
+  await page.getByTestId(`new-thread-host-option-${host.id}`).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__codexGatewayNewThreadContext ?? null))
+    .toEqual({ hostId: host.id, projectId: recentProject.id });
+});
+
 test("toggles an expanded project closed from the desktop sidebar", async ({ page }) => {
   await openApp(page);
   await seedGatewayThread(page, {

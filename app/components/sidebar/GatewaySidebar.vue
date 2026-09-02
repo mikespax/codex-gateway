@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ChevronDownIcon, SettingsIcon } from "@lucide/vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { Button } from "@codex-gateway/ui/button";
 import {
   Dialog,
@@ -31,9 +32,11 @@ import { useRecentThreadActivity } from "./thread-list/useRecentThreadActivity";
 import SidebarWorkspaceToolbar from "./SidebarWorkspaceToolbar.vue";
 import { useTmuxMonitorLauncher } from "@/composables/workspace/useTmuxMonitorLauncher";
 import { useSidebarHostMetrics } from "@/composables/host-metrics/useSidebarHostMetrics";
+import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity";
 import type { HostTreeController } from "./host-tree/controller";
 import type { HostRecord, PinnedThreadRecord, ProjectRecord } from "./sidebar-types";
 import { pinnedThreadKey } from "./sidebar-utils";
+import { selectNewThreadProject } from "./new-thread-target";
 import { gatewayApi } from "@/utils/gateway-api";
 import {
   errorMessageLabels,
@@ -65,6 +68,7 @@ type ThreadMoveSource = {
 };
 
 const catalog = useGatewayCatalogStore();
+const threadActivity = useGatewayThreadActivityStore();
 const config = useGatewayConfigStore();
 const navigation = useGatewayNavigationStore();
 const threadView = useGatewayThreadViewStore();
@@ -93,6 +97,7 @@ const {
   pinnedCompletionAttention,
 } = sidebarTree;
 const { recentThreads } = recentActivity;
+const { summariesByKey } = storeToRefs(threadActivity);
 const { selectedHostTitle, canLaunch } = workspaceActions;
 const { usageForHost } = useSidebarHostMetrics(hosts);
 const { activeCount: tmuxActiveCount } = tmuxLauncher;
@@ -330,14 +335,14 @@ async function openHostMonitor(hostId: number) {
 }
 
 function startNewThread(hostId: number) {
-  const projectId =
-    hostId === selectedHostId.value &&
-    catalog.projects.some(
-      (project) => project.id === selectedProjectId.value && project.hostId === hostId,
-    )
-      ? selectedProjectId.value
-      : null;
-  void threadView.startThread({}, { hostId, projectId });
+  const project = selectNewThreadProject({
+    hostId,
+    selectedHostId: selectedHostId.value,
+    selectedProjectId: selectedProjectId.value,
+    projects: catalog.projects,
+    activity: Object.values(summariesByKey.value),
+  });
+  void threadView.startThread({}, { hostId, projectId: project?.id ?? null });
 }
 </script>
 
