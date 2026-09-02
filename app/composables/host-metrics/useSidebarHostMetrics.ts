@@ -104,5 +104,5 @@ export function useSidebarHostMetrics(hosts: Ref<HostRecord[]>) {
 
 function formatPercent(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "—";
-  return `${Math.round(value * 10) / 10}%`;
+  return `${Math.round(value)}%`;
 }

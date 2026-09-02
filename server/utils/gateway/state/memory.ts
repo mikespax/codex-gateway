@@ -68,6 +68,20 @@ export interface GatewayMemoryState {
   configLoaded: boolean;
 }
 
+// These names shipped briefly in the host picker UI. Keep the display migration at the durable
+// configuration boundary as well as the write paths, otherwise a process restart can rehydrate
+// the old labels before a browser has a chance to submit a new configuration.
+function canonicalHostName(name: string) {
+  switch (name) {
+    case "Mac Pro — compute":
+      return "Mac";
+    case "Lenovo — compute":
+      return "Lenovo";
+    default:
+      return name;
+  }
+}
+
 function createGatewayMemoryState(): GatewayMemoryState {
   return {
     hosts: [],
@@ -240,6 +254,7 @@ export function buildGatewayMemoryState(config: GatewayConfig): GatewayMemorySta
     ...createGatewayMemoryState(),
     hosts: config.hosts.map((host) => ({
       ...host,
+      name: canonicalHostName(host.name),
       proxyUrl: trimmedOrNull(host.proxyUrl),
       hasPassword: typeof host.password === "string" && host.password.length > 0,
     })),

@@ -82,8 +82,11 @@ class HostRuntimeSupervisor {
           nextState.configLoaded = true;
           replaceCurrentGatewayMemoryState(nextState);
         }
+        // Use the normalized in-memory records. The durable configuration can contain a
+        // compatibility label from an older Gateway version, but runtime services and the UI
+        // must converge on the current canonical display name immediately after boot.
         this.syncUserConfig(user.id, {
-          hosts: config.hosts,
+          hosts: currentGatewayMemoryState().hosts,
         });
       });
     }
