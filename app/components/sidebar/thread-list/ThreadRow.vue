@@ -25,6 +25,7 @@ const props = defineProps<{
   resourceUsage?: string | null;
   pinLabel: string;
   moveLabel?: string;
+  moveHostLabel?: string;
   showPinnedIcon?: boolean;
   longPressHandlers?: Record<string, unknown>;
 }>();
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   open: [];
   togglePin: [];
   move: [];
+  moveHost: [];
   rename: [];
 }>();
 
@@ -80,6 +82,9 @@ const displaySubtitle = computed(() =>
       </ContextMenuItem>
       <ContextMenuItem v-if="moveLabel" @select="emit('move')">
         {{ moveLabel }}
+      </ContextMenuItem>
+      <ContextMenuItem v-if="moveHostLabel" @select="emit('moveHost')">
+        {{ moveHostLabel }}
       </ContextMenuItem>
       <ContextMenuItem @select="emit('rename')">
         {{ $t("app.renameThread") }}

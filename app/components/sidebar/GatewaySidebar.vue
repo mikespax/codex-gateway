@@ -22,6 +22,7 @@ import HostTree from "./host-tree/HostTree.vue";
 import PinnedThreadList from "./thread-list/PinnedThreadList.vue";
 import RecentThreadList from "./thread-list/RecentThreadList.vue";
 import ThreadRenameDialog from "./thread-list/ThreadRenameDialog.vue";
+import ThreadMoveDialog from "./thread-list/ThreadMoveDialog.vue";
 import SidebarScrollArea from "./SidebarScrollArea.vue";
 import { SidebarFooter } from "@codex-gateway/ui/sidebar";
 import { useSidebarTree } from "./host-tree/useSidebarTree";
@@ -33,9 +34,35 @@ import { useSidebarHostMetrics } from "@/composables/host-metrics/useSidebarHost
 import type { HostTreeController } from "./host-tree/controller";
 import type { HostRecord, PinnedThreadRecord, ProjectRecord } from "./sidebar-types";
 import { pinnedThreadKey } from "./sidebar-utils";
+import { gatewayApi } from "@/utils/gateway-api";
+import {
+  errorMessageLabels,
+  messageFromError,
+  titleForThread,
+} from "@/stores/gateway/thread-utils/identity";
+import type { ThreadMoveResult } from "~~/shared/types";
 
 const PINNED_GROUPS_KEY = "codex-gateway-pinned-groups";
 const SIDEBAR_SECTIONS_KEY = "codex-gateway-sidebar-sections";
+
+type ThreadMoveSourceInput = {
+  hostId: number;
+  projectId?: number | null;
+  threadId?: string | number;
+  id?: string | number;
+  title?: string | null;
+  name?: string | null;
+  preview?: string | null;
+  cwd?: string | null;
+};
+
+type ThreadMoveSource = {
+  hostId: number;
+  projectId: number | null;
+  threadId: string;
+  title: string;
+  sourceCwd: string | null;
+};
 
 const catalog = useGatewayCatalogStore();
 const config = useGatewayConfigStore();
@@ -46,6 +73,9 @@ const { t } = useI18n();
 const showSettings = ref(false);
 const showBrowserDialog = ref(false);
 const projectEditor = ref<{ host: HostRecord; project: ProjectRecord | null } | null>(null);
+const threadMove = ref<ThreadMoveSource | null>(null);
+const threadMoveSubmitting = ref(false);
+const threadMoveError = ref("");
 const { longPressTriggered, longPressContextMenuHandlers } = useLongPressContextMenu();
 const sidebarTree = useSidebarTree(longPressTriggered);
 const threadRename = useThreadRename();
@@ -66,6 +96,7 @@ const { recentThreads } = recentActivity;
 const { selectedHostTitle, canLaunch } = workspaceActions;
 const { usageForHost } = useSidebarHostMetrics(hosts);
 const { activeCount: tmuxActiveCount } = tmuxLauncher;
+const errorLabels = computed(() => errorMessageLabels(t));
 const inactivePinnedKeys = ref<Record<string, boolean>>({});
 const activePinnedExpanded = ref(true);
 const inactivePinnedExpanded = ref(false);
@@ -106,6 +137,8 @@ const hostTreeController = computed<HostTreeController>(() => ({
   threadRuntimeStatus: sidebarTree.threadRuntimeStatus,
   threadCompletionAttention: sidebarTree.threadCompletionAttention,
   hostResourceUsage: usageForHost,
+  canMoveThreadToHost: hosts.value.length > 1,
+  moveThread: requestThreadMove,
 }));
 
 function persistSidebarSections() {
@@ -129,6 +162,93 @@ async function movePinnedThread(thread: PinnedThreadRecord, inactive: boolean) {
     await config.setPinnedThreadInactive(thread, inactive);
   } catch (error) {
     console.warn("[gateway] failed to update pinned thread group", error);
+  }
+}
+
+function requestThreadMove(thread: ThreadMoveSourceInput) {
+  const threadId =
+    thread.threadId !== undefined
+      ? String(thread.threadId)
+      : thread.id !== undefined
+        ? String(thread.id)
+        : "";
+  if (threadId === "") return;
+  threadMoveError.value = "";
+  threadMove.value = {
+    hostId: thread.hostId,
+    projectId: thread.projectId ?? null,
+    threadId,
+    title: titleForThread(thread),
+    sourceCwd: typeof thread.cwd === "string" ? thread.cwd : null,
+  };
+}
+
+async function submitThreadMove(input: {
+  targetHostId: number;
+  targetProjectId: number | null;
+  targetCwd: string | null;
+}) {
+  const source = threadMove.value;
+  if (source === null) return;
+  threadMoveSubmitting.value = true;
+  threadMoveError.value = "";
+  try {
+    const result = await gatewayApi<ThreadMoveResult>("/api/threads/move", {
+      method: "POST",
+      body: {
+        sourceHostId: source.hostId,
+        sourceProjectId: source.projectId,
+        sourceThreadId: source.threadId,
+        targetHostId: input.targetHostId,
+        targetProjectId: input.targetProjectId,
+        targetCwd: input.targetCwd,
+      },
+    });
+    const targetProject = catalog.projects.find(
+      (project) => project.id === result.target.projectId,
+    );
+    const targetHost = hosts.value.find((host) => host.id === result.target.hostId);
+    try {
+      await config.setPinnedThread(
+        {
+          hostId: result.target.hostId,
+          projectId: result.target.projectId,
+          threadId: result.target.threadId,
+          title: result.target.title,
+          subtitle: result.target.cwd,
+          projectName: targetProject?.name ?? null,
+          updatedAt: Math.floor(Date.now() / 1000),
+        },
+        true,
+      );
+    } catch (error) {
+      // The move itself is already committed by the server. A pin-sync failure must not make the
+      // user retry the operation and create a duplicate target thread.
+      console.warn("[gateway] moved thread could not be pinned", {
+        targetHostId: result.target.hostId,
+        targetThreadId: result.target.threadId,
+        error,
+      });
+    }
+    threadMove.value = null;
+    await threadView.openThread(result.target.threadId, {
+      hostId: result.target.hostId,
+      projectId: result.target.projectId,
+    });
+    if (targetHost !== undefined) {
+      catalog.setHostConnectionStatus(targetHost.id, "connected");
+    }
+  } catch (error: unknown) {
+    threadMoveError.value = messageFromError(error, t("app.moveThreadFailed"), errorLabels.value);
+  } finally {
+    threadMoveSubmitting.value = false;
+  }
+}
+
+function closeThreadMove(open: boolean) {
+  if (!open && !threadMoveSubmitting.value) {
+    threadMove.value = null;
+    threadMoveError.value = "";
   }
 }
 
@@ -279,10 +399,12 @@ function startNewThread(hostId: number) {
               :completion-attention="pinnedCompletionAttention"
               :resource-usage-for-host="usageForHost"
               move-label="Move to Inactive"
+              :move-host-label="hosts.length > 1 ? t('app.moveThreadToHost') : undefined"
               :show-header="false"
               @open="openPinnedThread"
               @unpin="navigation.setPinnedThread($event, false)"
               @move="movePinnedThread($event, true)"
+              @move-host="requestThreadMove"
               @rename="threadRename.startRename"
             />
           </section>
@@ -318,10 +440,12 @@ function startNewThread(hostId: number) {
               :completion-attention="pinnedCompletionAttention"
               :resource-usage-for-host="usageForHost"
               move-label="Move to Active"
+              :move-host-label="hosts.length > 1 ? t('app.moveThreadToHost') : undefined"
               :show-header="false"
               @open="openPinnedThread"
               @unpin="navigation.setPinnedThread($event, false)"
               @move="movePinnedThread($event, false)"
+              @move-host="requestThreadMove"
               @rename="threadRename.startRename"
             />
           </section>
@@ -333,9 +457,11 @@ function startNewThread(hostId: number) {
             :long-press-handlers="longPressContextMenuHandlers"
             :resource-usage-for-host="usageForHost"
             :expanded="recentChatsExpanded"
+            :move-host-label="hosts.length > 1 ? t('app.moveThreadToHost') : undefined"
             @open="recentActivity.openRecentThread"
             @pin="recentActivity.pinRecentThread"
             @rename="threadRename.startRename"
+            @move-host="requestThreadMove"
             @toggle="
               recentChatsExpanded = !recentChatsExpanded;
               persistSidebarSections();
@@ -412,6 +538,19 @@ function startNewThread(hostId: number) {
       v-model="threadRename.renameValue.value"
       :submitting="threadRename.submitting.value"
       @submit="threadRename.submitRename"
+    />
+
+    <ThreadMoveDialog
+      :open="threadMove !== null"
+      :source-host-id="threadMove?.hostId ?? 0"
+      :source-title="threadMove?.title ?? ''"
+      :source-cwd="threadMove?.sourceCwd ?? null"
+      :hosts="hosts"
+      :projects="catalog.projects"
+      :submitting="threadMoveSubmitting"
+      :error="threadMoveError"
+      @update:open="closeThreadMove"
+      @submit="submitThreadMove"
     />
   </aside>
 </template>

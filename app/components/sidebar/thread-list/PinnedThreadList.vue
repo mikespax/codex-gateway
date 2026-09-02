@@ -16,6 +16,7 @@ const props = defineProps<{
   headerLabel?: string;
   showHeader?: boolean;
   moveLabel?: string;
+  moveHostLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
   unpin: [thread: PinnedThreadRecord];
   rename: [thread: PinnedThreadRecord];
   move: [thread: PinnedThreadRecord];
+  moveHost: [thread: PinnedThreadRecord];
 }>();
 
 function subtitleForPinnedThread(thread: PinnedThreadRecord) {
@@ -60,11 +62,13 @@ function isSelectedPinnedThread(thread: PinnedThreadRecord) {
         :resource-usage="props.resourceUsageForHost?.(thread.hostId)"
         :pin-label="$t('app.unpinThread')"
         :move-label="props.moveLabel"
+        :move-host-label="props.moveHostLabel"
         :long-press-handlers="longPressHandlers"
         show-pinned-icon
         @open="emit('open', thread)"
         @toggle-pin="emit('unpin', thread)"
         @move="emit('move', thread)"
+        @move-host="emit('moveHost', thread)"
         @rename="emit('rename', thread)"
       />
     </div>

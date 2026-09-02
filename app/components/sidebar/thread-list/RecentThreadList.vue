@@ -20,12 +20,14 @@ const props = defineProps<{
   longPressHandlers?: Record<string, unknown>;
   resourceUsageForHost?: (hostId: number) => string | null;
   expanded: boolean;
+  moveHostLabel?: string;
 }>();
 
 const emit = defineEmits<{
   open: [thread: RecentThread];
   pin: [thread: RecentThread];
   rename: [thread: RecentThread];
+  moveHost: [thread: RecentThread];
   toggle: [];
 }>();
 
@@ -65,9 +67,11 @@ function subtitle(thread: RecentThread) {
         :resource-usage="props.resourceUsageForHost?.(thread.hostId)"
         :pin-label="thread.pinned ? $t('app.unpinThread') : $t('app.pinThread')"
         :show-pinned-icon="thread.pinned"
+        :move-host-label="props.moveHostLabel"
         :long-press-handlers="props.longPressHandlers"
         @open="emit('open', thread)"
         @toggle-pin="emit('pin', thread)"
+        @move-host="emit('moveHost', thread)"
         @rename="emit('rename', thread)"
       />
     </div>

@@ -42,6 +42,25 @@ export const threadRenameSchema = z.object({
   name: z.string().trim().min(1).max(200),
 });
 
+/**
+ * A host move is a controlled handoff, not a raw filesystem copy. The source remains intact;
+ * the Gateway opens it, creates a new thread on the target host, and sends a reconciliation
+ * message containing the available conversation context.
+ */
+export const threadMoveSchema = z
+  .object({
+    sourceHostId: z.coerce.number().int().positive(),
+    sourceProjectId: optionalPositiveInt,
+    sourceThreadId: z.string().trim().min(1),
+    targetHostId: z.coerce.number().int().positive(),
+    targetProjectId: optionalPositiveInt,
+    targetCwd: z.string().trim().nullable().optional(),
+  })
+  .refine((input) => input.sourceHostId !== input.targetHostId, {
+    message: "Choose a different target host",
+    path: ["targetHostId"],
+  });
+
 export const threadSettingFields = {
   model: z.string().trim().nullable().optional(),
   effort: z.string().trim().min(1).nullable().optional(),

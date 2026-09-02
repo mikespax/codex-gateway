@@ -120,6 +120,9 @@ const controller = requireHostTreeController();
               :pin-label="thread.pinned ? $t('app.unpinThread') : $t('app.pinThread')"
               :long-press-handlers="controller.longPressHandlers"
               :show-pinned-icon="thread.pinned"
+              :move-host-label="
+                controller.canMoveThreadToHost ? $t('app.moveThreadToHost') : undefined
+              "
               @open="
                 controller.openThread(String(thread.id), {
                   hostId: project.hostId,
@@ -127,6 +130,9 @@ const controller = requireHostTreeController();
                 })
               "
               @toggle-pin="controller.toggleThreadPin(String(thread.id), !thread.pinned)"
+              @move-host="
+                controller.moveThread({ ...thread, hostId: project.hostId, projectId: project.id })
+              "
               @rename="controller.rename({ ...thread, hostId: project.hostId })"
             />
           </template>

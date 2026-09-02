@@ -60,6 +60,20 @@ export interface ThreadOpenResult {
   recentEvents: GatewayEvent[];
 }
 
+export interface ThreadMoveResult {
+  source: {
+    hostId: number;
+    threadId: string;
+  };
+  target: {
+    hostId: number;
+    projectId: number;
+    threadId: string;
+    title: string;
+    cwd: string;
+  };
+}
+
 export interface ThreadTurnsPageResult {
   history: ThreadTimelineHistoryState;
   turnsPage: {
