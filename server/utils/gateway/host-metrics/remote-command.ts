@@ -59,7 +59,11 @@ if [ ! -r /proc/stat ] || [ ! -r /proc/meminfo ] || [ ! -r /proc/net/dev ] || [ 
   printf '@@UNSUPPORTED\n'
   exit 0
 fi
-sampled_at="$(date +%s%3N 2>/dev/null || printf '%s000' "$(date +%s)")"
+sampled_at_seconds="$(date +%s 2>/dev/null || true)"
+case "$sampled_at_seconds" in
+  ''|*[!0-9]*) printf '@@UNSUPPORTED\n'; exit 0 ;;
+esac
+sampled_at="$sampled_at_seconds""000"
 printf '@@BEGIN\t%s\n' "$sampled_at"
 printf '@@CPU\n'
 sed -n '1p' /proc/stat
