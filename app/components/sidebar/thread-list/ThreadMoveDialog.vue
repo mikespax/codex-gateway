@@ -40,10 +40,16 @@ const emit = defineEmits<{
 
 const targetHostId = ref<number | null>(null);
 const targetProjectId = ref<number | null>(null);
+const targetProjectChoice = ref<"custom" | "preset" | string>("custom");
 const targetCwd = ref("");
 const targetHosts = computed(() => props.hosts.filter((host) => host.id !== props.sourceHostId));
+const targetHost = computed(() => props.hosts.find((host) => host.id === targetHostId.value));
 const targetProjects = computed(() =>
   props.projects.filter((project) => project.hostId === targetHostId.value),
+);
+const recommendedTargetPath = computed(() => presetPathForHost(targetHost.value));
+const targetProjectSelectValue = computed(() =>
+  targetProjectId.value === null ? targetProjectChoice.value : String(targetProjectId.value),
 );
 const canSubmit = computed(
   () =>
@@ -60,28 +66,65 @@ watch(
 );
 
 watch(targetHostId, () => {
-  const firstProject = targetProjects.value[0];
-  targetProjectId.value = firstProject?.id ?? null;
-  targetCwd.value = firstProject?.remotePath ?? props.sourceCwd ?? "";
+  configureTarget();
 });
 
-watch(targetProjectId, (projectId) => {
-  if (projectId === null) {
+function selectProject(value: string | undefined) {
+  if (value === undefined || value === "custom") {
+    targetProjectId.value = null;
+    targetProjectChoice.value = "custom";
     if (targetCwd.value.trim() === "") targetCwd.value = props.sourceCwd ?? "";
     return;
   }
+
+  if (value === "preset") {
+    targetProjectId.value = null;
+    targetProjectChoice.value = "preset";
+    targetCwd.value = recommendedTargetPath.value ?? props.sourceCwd ?? "";
+    return;
+  }
+
+  const projectId = Number(value);
+  if (!Number.isInteger(projectId)) return;
+  targetProjectId.value = projectId;
+  targetProjectChoice.value = value;
   const project = targetProjects.value.find((candidate) => candidate.id === projectId);
   if (project !== undefined) targetCwd.value = project.remotePath;
-});
+}
 
 function reset() {
   const firstHost = targetHosts.value[0];
   targetHostId.value = firstHost?.id ?? null;
-  const firstProject = firstHost
-    ? props.projects.find((project) => project.hostId === firstHost.id)
+  configureTarget(firstHost);
+}
+
+function configureTarget(host = targetHost.value) {
+  const firstProject = host
+    ? props.projects.find((project) => project.hostId === host.id)
     : undefined;
-  targetProjectId.value = firstProject?.id ?? null;
-  targetCwd.value = firstProject?.remotePath ?? props.sourceCwd ?? "";
+  if (firstProject !== undefined) {
+    targetProjectId.value = firstProject.id;
+    targetProjectChoice.value = String(firstProject.id);
+    targetCwd.value = firstProject.remotePath;
+    return;
+  }
+
+  targetProjectId.value = null;
+  const presetPath = presetPathForHost(host);
+  targetProjectChoice.value = presetPath === null ? "custom" : "preset";
+  targetCwd.value = presetPath ?? props.sourceCwd ?? "";
+}
+
+function presetPathForHost(host: HostRecord | undefined): string | null {
+  if (host === undefined) return null;
+  const name = host.name
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+  if (name.includes("lenovo")) return "/root/.codex";
+  if (name.includes("mac")) return "/Users/Sparks/.codex";
+  if (name.includes("vps") || name.includes("contabo")) return "/root";
+  return null;
 }
 
 function submit() {
@@ -129,9 +172,9 @@ function submit() {
         <div class="grid gap-2">
           <Label for="move-thread-project">{{ $t("app.moveThreadTargetProject") }}</Label>
           <Select
-            :model-value="targetProjectId === null ? 'custom' : String(targetProjectId)"
+            :model-value="targetProjectSelectValue"
             :disabled="submitting || targetHostId === null"
-            @update:model-value="targetProjectId = $event === 'custom' ? null : Number($event)"
+            @update:model-value="selectProject($event)"
           >
             <SelectTrigger
               id="move-thread-project"
@@ -141,6 +184,12 @@ function submit() {
               <SelectValue :placeholder="$t('app.moveThreadTargetProject')" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem
+                v-if="targetProjects.length === 0 && recommendedTargetPath !== null"
+                value="preset"
+              >
+                Recommended — {{ recommendedTargetPath }}
+              </SelectItem>
               <SelectItem value="custom">{{ $t("app.moveThreadCustomPath") }}</SelectItem>
               <SelectItem
                 v-for="project in targetProjects"
@@ -152,7 +201,9 @@ function submit() {
             </SelectContent>
           </Select>
           <p
-            v-if="targetHostId !== null && targetProjects.length === 0"
+            v-if="
+              targetHostId !== null && targetProjects.length === 0 && recommendedTargetPath === null
+            "
             class="text-xs text-ink-muted"
           >
             {{ $t("app.moveThreadNoProjects") }}
