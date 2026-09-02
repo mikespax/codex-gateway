@@ -2,9 +2,21 @@ import type { HostCreateInput, HostRecord, HostUpdateInput } from "~~/shared/typ
 import { trimmedOrNull } from "~~/shared/utils/strings";
 import { gatewayMemoryState, nextId, nowIso, type StoredHostRecord } from "./memory";
 
+function canonicalHostName(name: string) {
+  switch (name) {
+    case "Mac Pro — compute":
+      return "Mac";
+    case "Lenovo — compute":
+      return "Lenovo";
+    default:
+      return name;
+  }
+}
+
 function sanitizeHost(host: StoredHostRecord): HostRecord {
   return {
     ...host,
+    name: canonicalHostName(host.name),
     hasPassword: Boolean(host.password),
   };
 }
@@ -14,7 +26,7 @@ function normalizeHost(input: HostCreateInput, id = nextId(gatewayMemoryState.ho
   const existing = gatewayMemoryState.hosts.find((host) => host.id === id);
   return {
     id,
-    name: input.name.trim(),
+    name: canonicalHostName(input.name.trim()),
     sshHost: input.sshHost.trim(),
     username: trimmedOrNull(input.username),
     port: input.port ?? null,
@@ -33,6 +45,7 @@ export const hostStore = {
   replaceHosts(hosts: HostRecord[]) {
     gatewayMemoryState.hosts = hosts.map((host) => ({
       ...host,
+      name: canonicalHostName(host.name),
       proxyUrl: trimmedOrNull(host.proxyUrl),
       hasPassword: Boolean(host.password),
     }));
