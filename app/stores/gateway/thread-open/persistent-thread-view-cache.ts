@@ -54,14 +54,23 @@ export async function readPersistentThreadView(hostId: number, threadId: string)
   const key = cacheKey(account, hostId, threadId);
   try {
     const database = await threadViewDatabase();
-    const record = await database.get("threadViews", key);
-    if (record === undefined) return null;
+    // Read and touch the record in one transaction. A separate get followed by put can
+    // overwrite a newer snapshot written while the IndexedDB request was in flight; returning
+    // that stale view would then schedule another stale write during thread restoration.
+    const transaction = database.transaction("threadViews", "readwrite");
+    const record = await transaction.store.get(key);
+    if (record === undefined) {
+      await transaction.done;
+      return null;
+    }
     if (record.expiresAt <= Date.now() || !isValidRecord(record, account, hostId, threadId)) {
-      await database.delete("threadViews", key);
+      await transaction.store.delete(key);
+      await transaction.done;
       return null;
     }
     record.lastAccessedAt = Date.now();
-    await database.put("threadViews", record);
+    await transaction.store.put(record);
+    await transaction.done;
     return hydratedThreadView(record.view);
   } catch (error) {
     warnCacheFailure("read", error);
@@ -102,15 +111,15 @@ export function persistThreadViewSoon(view: ThreadViewState) {
 async function writePersistentThreadView(record: PersistentThreadViewRecord) {
   try {
     const database = await threadViewDatabase();
-    await database.put("threadViews", record);
-    const records = await database.getAllFromIndex("threadViews", "by-account", record.account);
+    const transaction = database.transaction("threadViews", "readwrite");
+    await transaction.store.put(record);
+    const records = await transaction.store.index("by-account").getAll(record.account);
     const now = Date.now();
     const retained = records
       .filter((candidate) => candidate.expiresAt > now)
       .sort((left, right) => right.lastAccessedAt - left.lastAccessedAt)
       .slice(0, CLIENT_THREAD_CACHE_LIMIT);
     const retainedKeys = new Set(retained.map((candidate) => candidate.key));
-    const transaction = database.transaction("threadViews", "readwrite");
     await Promise.all([
       ...records
         .filter((candidate) => !retainedKeys.has(candidate.key))

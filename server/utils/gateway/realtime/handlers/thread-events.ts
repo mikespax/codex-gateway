@@ -60,13 +60,13 @@ export async function activateThread(
       input.limit,
       activationController,
       input.cwd,
+      lastEventId,
     );
     sendRealtimePeerMessage(peer, {
       type: "thread.snapshot",
       requestId: message.requestId,
       hostId: input.hostId,
       threadId: input.threadId,
-      lastEventId,
       eventEpoch,
       ...result,
     });
@@ -74,7 +74,7 @@ export async function activateThread(
       peer,
       host,
       input.threadId,
-      lastEventId,
+      result.lastEventId,
       eventEpoch,
       result.runtimeStatus === "running",
       { lease: activationLease, controller: activationController },

@@ -21,6 +21,7 @@ import type { ThreadController } from "./thread-controller";
 import { pageCursorState, pageToFullHistory } from "./thread-history-pages";
 import { runtimeLog } from "./runtime-log";
 import { threadRuntimeEvents } from "./thread-runtime-events";
+import { applyEventToOpenSnapshot } from "./open-snapshot-events";
 import type { ThreadOpenSnapshot } from "./types";
 import { currentGatewayUserId } from "../state/memory";
 import {
@@ -45,14 +46,25 @@ export class ThreadOpenService {
     limit = INITIAL_TURN_PAGE_LIMIT,
     activationController?: ThreadController,
     projectCwd?: string | null,
+    afterEventId?: number,
   ) {
+    const snapshotEventCursor = afterEventId ?? gatewayEventStore.latestId(host.id, threadId);
     const memorySnapshot = threadSnapshotStore.get(host.id, threadId);
     const persistentCandidate =
       memorySnapshot === null
-        ? await this.restoreVerifiedPersistentSnapshot(host, threadId, projectId)
+        ? await this.restoreVerifiedPersistentSnapshot(
+            host,
+            threadId,
+            projectId,
+            snapshotEventCursor,
+          )
         : null;
     const cachedSnapshot = memorySnapshot ?? persistentCandidate?.snapshot ?? null;
     const fallbackRuntimeStatus = persistentCandidate?.authoritativeStatus ?? null;
+    const cachedSnapshotEventCursor =
+      persistentCandidate?.verified === true
+        ? persistentCandidate.lastEventId
+        : snapshotEventCursor;
     if (cachedSnapshot) {
       if (
         persistentCandidate?.verified !== false &&
@@ -65,7 +77,15 @@ export class ThreadOpenService {
         // that policy made long conversations slow while their realtime controller was healthy.
         // Only an absent or too-shallow cache requires remote history I/O; reconnect gaps already
         // use the authoritative refresh path explicitly.
-        return this.snapshotResult(host, threadId, projectId, cachedSnapshot, projectCwd);
+        return this.snapshotResult(
+          host,
+          threadId,
+          projectId,
+          cachedSnapshot,
+          projectCwd,
+          undefined,
+          cachedSnapshotEventCursor,
+        );
       }
       if (persistentCandidate?.verified !== false) {
         runtimeLog("thread cache depth refresh", {
@@ -91,6 +111,7 @@ export class ThreadOpenService {
         limit,
         activationController,
         projectCwd,
+        snapshotEventCursor,
       );
     } catch (error) {
       // A transport/RPC failure must not turn a materialized conversation into an empty view.
@@ -112,6 +133,7 @@ export class ThreadOpenService {
           cachedSnapshot,
           projectCwd,
           fallbackRuntimeStatus,
+          cachedSnapshotEventCursor,
         );
       }
       throw error;
@@ -122,9 +144,16 @@ export class ThreadOpenService {
     host: HostRecord,
     threadId: string,
     projectId: number | null,
+    afterEventId: number,
   ): Promise<PersistentThreadSnapshotCandidate | null> {
     const snapshot = threadSnapshotStore.restorePersistent(host.id, threadId);
     if (snapshot === null) return null;
+    // Durable snapshots intentionally do not persist a Gateway event cursor. Once this thread
+    // has events in the current process, their coverage cannot be proven against the durable
+    // snapshot, so an authoritative refresh is safer than advancing past possibly unmaterialized
+    // deltas. A post-restart restore starts at cursor zero and can reconcile events emitted during
+    // validation normally.
+    if (afterEventId > 0) return null;
 
     let authoritativeThread: AppServerThread;
     try {
@@ -148,7 +177,12 @@ export class ThreadOpenService {
         threadId,
         message: error instanceof Error ? error.message : String(error),
       });
-      return { snapshot, verified: false, authoritativeStatus: null };
+      return {
+        snapshot,
+        verified: false,
+        authoritativeStatus: null,
+        lastEventId: afterEventId,
+      };
     }
 
     const status = runtimeStatusFromTopLevelThreadState(authoritativeThread);
@@ -165,7 +199,12 @@ export class ThreadOpenService {
         authoritativeStatus: status,
         action: "retained_for_fallback",
       });
-      return { snapshot, verified: false, authoritativeStatus: status };
+      return {
+        snapshot,
+        verified: false,
+        authoritativeStatus: status,
+        lastEventId: afterEventId,
+      };
     }
 
     // Seed both volatile indexes from the authoritative metadata. Keep the cached history and
@@ -175,14 +214,25 @@ export class ThreadOpenService {
       authoritativeThread === snapshot.thread
         ? snapshot
         : { ...snapshot, thread: authoritativeThread };
+    const { snapshot: reconciledSnapshot, lastEventId } = applyEventsAfter(
+      host.id,
+      threadId,
+      verifiedSnapshot,
+      afterEventId,
+    );
     threadMetadataStore.record(host.id, projectId ?? snapshot.projectId, authoritativeThread);
-    threadSnapshotStore.hydratePersistent(host.id, threadId, verifiedSnapshot);
+    threadSnapshotStore.hydratePersistent(host.id, threadId, reconciledSnapshot);
     runtimeLog("persistent thread cache hit", {
       hostId: host.id,
       threadId,
-      updatedAt: verifiedSnapshot.thread.updatedAt,
+      updatedAt: reconciledSnapshot.thread.updatedAt,
     });
-    return { snapshot: verifiedSnapshot, verified: true, authoritativeStatus: status };
+    return {
+      snapshot: reconciledSnapshot,
+      verified: true,
+      authoritativeStatus: status,
+      lastEventId,
+    };
   }
 
   startedThreadResult(host: HostRecord, projectId: number | null, rawResult: unknown) {
@@ -242,6 +292,7 @@ export class ThreadOpenService {
     limit = INITIAL_TURN_PAGE_LIMIT,
     activationController?: ThreadController,
     projectCwd?: string | null,
+    afterEventId?: number,
   ): Promise<ReturnTypeResult> {
     const key = refreshKey(host.id, threadId);
     const pending = this.pendingRefreshes.get(key);
@@ -259,6 +310,7 @@ export class ThreadOpenService {
         limit,
         activationController,
         projectCwd,
+        afterEventId,
       );
     }
 
@@ -269,6 +321,7 @@ export class ThreadOpenService {
       limit,
       activationController,
       projectCwd,
+      afterEventId ?? gatewayEventStore.latestId(host.id, threadId),
     );
     this.pendingRefreshes.set(key, { limit, promise });
     try {
@@ -281,6 +334,8 @@ export class ThreadOpenService {
   }
 
   async refreshThreadRuntimeStatus(host: HostRecord, threadId: string) {
+    const snapshotEventCursor = gatewayEventStore.latestId(host.id, threadId);
+    const cachedSnapshot = threadSnapshotStore.get(host.id, threadId);
     const client = await this.registry.getHostClient(host);
     const result = await client.request(
       "thread/read",
@@ -289,15 +344,20 @@ export class ThreadOpenService {
       parseThreadReadResult,
     );
     threadMetadataStore.record(host.id, null, result.thread);
-    const cachedSnapshot = threadSnapshotStore.get(host.id, threadId);
+    let reconciledSnapshot: ThreadOpenSnapshot | null = null;
     if (cachedSnapshot !== null) {
-      const snapshot = { ...cachedSnapshot, thread: result.thread };
-      threadSnapshotStore.set(host.id, threadId, snapshot);
+      reconciledSnapshot = applyEventsAfter(
+        host.id,
+        threadId,
+        { ...cachedSnapshot, thread: result.thread },
+        snapshotEventCursor,
+      ).snapshot;
+      threadSnapshotStore.set(host.id, threadId, reconciledSnapshot);
     }
     const status =
       runtimeStatusFromSnapshotState(
         result.thread,
-        cachedSnapshot?.history ?? { thread: { id: threadId, turns: [] } },
+        reconciledSnapshot?.history ?? { thread: { id: threadId, turns: [] } },
       ) ?? "completed";
     threadRuntimeEvents.record(host.id, threadId, "thread/status/changed", {
       method: "thread/status/changed",
@@ -313,14 +373,16 @@ export class ThreadOpenService {
     limit: number,
     activationController?: ThreadController,
     projectCwd?: string | null,
+    afterEventId = gatewayEventStore.latestId(host.id, threadId),
   ) {
-    const { snapshot, resolvedProjectId } = await this.loadRemoteOpenSnapshot(
+    const { snapshot, resolvedProjectId, lastEventId } = await this.loadRemoteOpenSnapshot(
       host,
       threadId,
       projectId,
       limit,
       activationController,
       projectCwd,
+      afterEventId,
     );
     const status = runtimeStatusFromSnapshotState(snapshot.thread, snapshot.history) ?? "completed";
     // The refresh event is the backend's canonical correction after reconnect
@@ -336,6 +398,7 @@ export class ThreadOpenService {
     return {
       thread: gatewayThreadFromAppServer(host.id, resolvedProjectId, snapshot.thread),
       history: snapshot.history,
+      lastEventId,
       runtimeStatus: runtimeStatusFromThreadState(snapshot.thread, snapshot.history, recentEvents),
       projectId: resolvedProjectId,
       project: resolvedProjectId === null ? null : projectStore.get(resolvedProjectId),
@@ -353,6 +416,7 @@ export class ThreadOpenService {
     snapshot: ThreadOpenSnapshot,
     projectCwd?: string | null,
     runtimeStatusOverride?: ThreadRuntimeStatus | null,
+    lastEventId = gatewayEventStore.latestId(host.id, threadId),
   ) {
     const recentEvents = gatewayEventStore.list(host.id, threadId, 0, 200);
     const resolvedProjectId = resolveProjectId(
@@ -369,6 +433,7 @@ export class ThreadOpenService {
     return {
       thread: gatewayThreadFromAppServer(host.id, resolvedProjectId, snapshot.thread),
       history: snapshot.history,
+      lastEventId,
       runtimeStatus:
         runtimeStatusOverride ??
         runtimeStatusFromThreadState(snapshot.thread, snapshot.history, recentEvents),
@@ -388,6 +453,7 @@ export class ThreadOpenService {
     limit: number,
     activationController?: ThreadController,
     projectCwd?: string | null,
+    afterEventId = gatewayEventStore.latestId(host.id, threadId),
   ) {
     if (activationController !== undefined) {
       const resumed = await activationController.resumeWithInitialTurnsPage(limit);
@@ -403,6 +469,7 @@ export class ThreadOpenService {
         extractThreadSettings(resumed),
         activationController,
         projectCwd,
+        afterEventId,
       );
     }
 
@@ -438,6 +505,7 @@ export class ThreadOpenService {
       latestThreadSettingsFromEvents(gatewayEventStore.list(host.id, threadId, 0, 200)),
       undefined,
       projectCwd,
+      afterEventId,
     );
   }
 
@@ -449,6 +517,7 @@ export class ThreadOpenService {
     threadSettings: ReturnType<typeof extractThreadSettings> | null,
     activationController?: ThreadController,
     projectCwd?: string | null,
+    afterEventId = gatewayEventStore.latestId(host.id, thread.id),
   ) {
     const threadId = thread.id;
     const resolvedProjectId = resolveProjectId(host.id, projectId, thread.cwd, projectCwd);
@@ -459,21 +528,26 @@ export class ThreadOpenService {
     // thread/settings/updated projection when one exists; otherwise the resume DTO still supplies
     // model and effort for threads that have never changed settings during this Gateway lifetime.
     const effectiveThreadSettings = latestThreadSettingsFromEvents(recentEvents) ?? threadSettings;
-    const snapshot = {
-      thread,
-      history: projectThreadTimelineHistory(pageToFullHistory(thread, initialTurnsPage)),
-      projectId: resolvedProjectId,
-      turnsPage: pageCursorState(initialTurnsPage),
-      threadSettings: effectiveThreadSettings,
-      tokenUsage: latestTokenUsageFromEvents(recentEvents),
-    };
+    const { snapshot, lastEventId } = applyEventsAfter(
+      host.id,
+      threadId,
+      {
+        thread,
+        history: projectThreadTimelineHistory(pageToFullHistory(thread, initialTurnsPage)),
+        projectId: resolvedProjectId,
+        turnsPage: pageCursorState(initialTurnsPage),
+        threadSettings: effectiveThreadSettings,
+        tokenUsage: latestTokenUsageFromEvents(recentEvents),
+      },
+      afterEventId,
+    );
     // During browser activation the controller is created before the cold snapshot exists. Route
     // the write through it so sub-agent classification and active-main-thread handoff state are
     // initialized together with the cache. Non-browser reconciliation has no activation controller
     // and writes the same canonical snapshot directly.
     if (activationController === undefined) threadSnapshotStore.set(host.id, threadId, snapshot);
     else activationController.setOpenSnapshot(snapshot);
-    return { snapshot, resolvedProjectId };
+    return { snapshot, resolvedProjectId, lastEventId };
   }
 }
 
@@ -483,6 +557,7 @@ interface PersistentThreadSnapshotCandidate {
   snapshot: ThreadOpenSnapshot;
   verified: boolean;
   authoritativeStatus: ThreadRuntimeStatus | null;
+  lastEventId: number;
 }
 
 function snapshotSatisfiesTurnLimit(snapshot: ThreadOpenSnapshot, limit: number) {
@@ -528,10 +603,33 @@ function normalizedPath(value: unknown) {
 }
 
 function snapshotRecentEvents() {
-  // Thread snapshots already include materialized history plus lastEventId. Re-sending recent
+  // Open results already include materialized history plus lastEventId. Re-sending recent
   // app-server events here duplicates large cumulative diff/output payloads and can push mobile
   // browsers over their renderer memory limit before the realtime subscription starts. New live
   // events are replayed through thread.event after lastEventId, so the snapshot path intentionally
   // keeps this legacy field empty while runtime status/token usage are computed server-side above.
   return [];
+}
+
+function applyEventsAfter(
+  hostId: number,
+  threadId: string,
+  snapshot: ThreadOpenSnapshot,
+  afterEventId: number,
+) {
+  // If the captured cursor predates the retained event window, do not advance the snapshot
+  // cursor to the newest retained event. The caller will subscribe from the original cursor and
+  // receive thread.events.gap, which owns authoritative recovery instead of silently skipping
+  // events that were pruned while the remote snapshot was loading.
+  if (gatewayEventStore.hasReplayGap(hostId, threadId, afterEventId)) {
+    return { snapshot, lastEventId: afterEventId };
+  }
+  let reconciled = snapshot;
+  const events = gatewayEventStore.list(hostId, threadId, afterEventId, 500);
+  for (const event of events) {
+    reconciled =
+      applyEventToOpenSnapshot(reconciled, event.method, event.payload, event.createdAt) ??
+      reconciled;
+  }
+  return { snapshot: reconciled, lastEventId: events.at(-1)?.id ?? afterEventId };
 }
