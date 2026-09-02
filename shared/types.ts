@@ -67,6 +67,7 @@ export type {
   HostMetricsSample,
   HostMetricsSnapshot,
   HostNetworkMetrics,
+  HostResourceUsageSummary,
 } from "./types/host-metrics";
 export type { ServerNotification, ServerNotificationTarget } from "./types/notifications";
 export type {

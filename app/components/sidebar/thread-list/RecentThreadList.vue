@@ -18,6 +18,7 @@ const props = defineProps<{
   selectedHostId: number | null;
   selectedThreadId: string | null;
   longPressHandlers?: Record<string, unknown>;
+  resourceUsageForHost?: (hostId: number) => string | null;
   expanded: boolean;
 }>();
 
@@ -29,11 +30,7 @@ const emit = defineEmits<{
 }>();
 
 function subtitle(thread: RecentThread) {
-  const folder = thread.cwd?.split("/").filter(Boolean).at(-1) ?? null;
-  return (
-    [thread.hostName, thread.projectName ?? folder].filter(Boolean).join(" / ") ||
-    formatRelative(thread.updatedAt)
-  );
+  return thread.hostName || formatRelative(thread.updatedAt);
 }
 </script>
 
@@ -48,7 +45,10 @@ function subtitle(thread: RecentThread) {
         {{ $t("app.recentChats") }}
         <span class="text-xs text-ink-faint">({{ props.threads.length }})</span>
       </span>
-      <ChevronDownIcon class="size-4 transition-transform" :class="{ '-rotate-90': !props.expanded }" />
+      <ChevronDownIcon
+        class="size-4 transition-transform"
+        :class="{ '-rotate-90': !props.expanded }"
+      />
     </button>
     <div v-if="props.expanded && props.threads.length" class="space-y-1">
       <ThreadRow
@@ -56,10 +56,13 @@ function subtitle(thread: RecentThread) {
         :key="threadKey(thread.hostId, thread.threadId)"
         :thread="thread"
         :test-id="`recent-thread-button-${thread.threadId}`"
-        :selected="thread.hostId === props.selectedHostId && thread.threadId === props.selectedThreadId"
+        :selected="
+          thread.hostId === props.selectedHostId && thread.threadId === props.selectedThreadId
+        "
         :status="thread.status"
         :completion-attention="thread.completionAttention"
         :subtitle="subtitle(thread)"
+        :resource-usage="props.resourceUsageForHost?.(thread.hostId)"
         :pin-label="thread.pinned ? $t('app.unpinThread') : $t('app.pinThread')"
         :show-pinned-icon="thread.pinned"
         :long-press-handlers="props.longPressHandlers"

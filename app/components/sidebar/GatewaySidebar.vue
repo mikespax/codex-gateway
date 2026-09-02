@@ -29,6 +29,7 @@ import { useThreadRename } from "./thread-list/useThreadRename";
 import { useRecentThreadActivity } from "./thread-list/useRecentThreadActivity";
 import SidebarWorkspaceToolbar from "./SidebarWorkspaceToolbar.vue";
 import { useTmuxMonitorLauncher } from "@/composables/workspace/useTmuxMonitorLauncher";
+import { useSidebarHostMetrics } from "@/composables/host-metrics/useSidebarHostMetrics";
 import type { HostTreeController } from "./host-tree/controller";
 import type { HostRecord, PinnedThreadRecord, ProjectRecord } from "./sidebar-types";
 import { pinnedThreadKey } from "./sidebar-utils";
@@ -55,6 +56,7 @@ const {
   hosts,
   pinnedThreads,
   selectedHostId,
+  selectedProjectId,
   selectedThreadId,
   openPinnedThread,
   pinnedRuntimeStatus,
@@ -62,6 +64,7 @@ const {
 } = sidebarTree;
 const { recentThreads } = recentActivity;
 const { selectedHostTitle, canLaunch } = workspaceActions;
+const { usageForHost } = useSidebarHostMetrics(hosts);
 const { activeCount: tmuxActiveCount } = tmuxLauncher;
 const inactivePinnedKeys = ref<Record<string, boolean>>({});
 const activePinnedExpanded = ref(true);
@@ -102,6 +105,7 @@ const hostTreeController = computed<HostTreeController>(() => ({
   rename: threadRename.startRename,
   threadRuntimeStatus: sidebarTree.threadRuntimeStatus,
   threadCompletionAttention: sidebarTree.threadCompletionAttention,
+  hostResourceUsage: usageForHost,
 }));
 
 function persistSidebarSections() {
@@ -204,6 +208,17 @@ async function openHostMonitor(hostId: number) {
   await nextTick();
   workspaceActions.openHostMonitor();
 }
+
+function startNewThread(hostId: number) {
+  const projectId =
+    hostId === selectedHostId.value &&
+    catalog.projects.some(
+      (project) => project.id === selectedProjectId.value && project.hostId === hostId,
+    )
+      ? selectedProjectId.value
+      : null;
+  void threadView.startThread({}, { hostId, projectId });
+}
 </script>
 
 <template>
@@ -225,11 +240,12 @@ async function openHostMonitor(hostId: number) {
       :title="selectedHostTitle"
       :can-launch="canLaunch"
       :tmux-active-count="tmuxActiveCount"
+      :hosts="hosts"
       @open-tmux="tmuxLauncher.open"
       @open-terminal="workspaceActions.openTerminal"
       @open-browser="showBrowserDialog = true"
       @open-host-monitor="workspaceActions.openHostMonitor"
-      @new-thread="threadView.startThread()"
+      @new-thread="startNewThread"
     />
     <div class="flex min-h-0 flex-1 overflow-hidden px-3 py-3">
       <SidebarScrollArea>
@@ -261,6 +277,7 @@ async function openHostMonitor(hostId: number) {
               :long-press-handlers="longPressContextMenuHandlers"
               :runtime-status="pinnedRuntimeStatus"
               :completion-attention="pinnedCompletionAttention"
+              :resource-usage-for-host="usageForHost"
               move-label="Move to Inactive"
               :show-header="false"
               @open="openPinnedThread"
@@ -299,6 +316,7 @@ async function openHostMonitor(hostId: number) {
               :long-press-handlers="longPressContextMenuHandlers"
               :runtime-status="pinnedRuntimeStatus"
               :completion-attention="pinnedCompletionAttention"
+              :resource-usage-for-host="usageForHost"
               move-label="Move to Active"
               :show-header="false"
               @open="openPinnedThread"
@@ -313,6 +331,7 @@ async function openHostMonitor(hostId: number) {
             :selected-host-id="selectedHostId"
             :selected-thread-id="selectedThreadId"
             :long-press-handlers="longPressContextMenuHandlers"
+            :resource-usage-for-host="usageForHost"
             :expanded="recentChatsExpanded"
             @open="recentActivity.openRecentThread"
             @pin="recentActivity.pinRecentThread"

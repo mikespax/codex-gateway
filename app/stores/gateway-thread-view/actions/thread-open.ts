@@ -327,6 +327,7 @@ export function createThreadOpenActions() {
       options: ComposerTurnOptions = {},
       context?: { hostId?: number; projectId?: number | null },
     ) {
+      const gateway = useGatewayBootstrapStore();
       const navigation = useGatewayNavigationStore();
       cacheSelectedThreadView();
       const viewEpoch = beginViewTransition();
@@ -338,24 +339,34 @@ export function createThreadOpenActions() {
       }
       if (navigation.selectedHostId === null) return;
       const sessionIsCurrent = captureSessionEpoch();
-      const result = await requestStartThread(options);
-      if (!sessionIsCurrent() || !isCurrentViewTransition(viewEpoch)) return;
-      const threadId = applyStartedThreadResult(result);
-      cacheSelectedThreadView();
-      rememberOpenThread(threadId);
-      syncSelectedRoute();
-      useGatewayRealtimeStore().connectThreadEvents(
-        navigation.selectedHostId,
-        threadId,
-        useGatewayThreadViewStore().lastEventId,
-        useGatewayThreadViewStore().eventEpoch,
-      );
+      const hostId = navigation.selectedHostId;
+      const projectId = navigation.selectedProjectId;
+      try {
+        const result = await requestStartThread(options);
+        if (!sessionIsCurrent() || !isCurrentViewTransition(viewEpoch)) return;
+        const threadId = applyStartedThreadResult(result);
+        cacheSelectedThreadView();
+        rememberOpenThread(threadId);
+        syncSelectedRoute();
+        useGatewayRealtimeStore().connectThreadEvents(
+          navigation.selectedHostId,
+          threadId,
+          useGatewayThreadViewStore().lastEventId,
+          useGatewayThreadViewStore().eventEpoch,
+        );
 
-      // Creating the thread is the authoritative state transition. Commit its selection and URL
-      // before refreshing the sidebar catalog: that secondary RPC may be slow while a host has
-      // just upgraded/restarted, but it must not leave a successfully created thread unreachable.
-      await navigation.listThreads();
-      cacheSelectedThreadView();
+        // Creating the thread is the authoritative state transition. Commit its selection and URL
+        // before refreshing the sidebar catalog: that secondary RPC may be slow while a host has
+        // just upgraded/restarted, but it must not leave a successfully created thread unreachable.
+        await navigation.listThreads();
+        cacheSelectedThreadView();
+      } catch (error: unknown) {
+        if (!sessionIsCurrent() || !isCurrentViewTransition(viewEpoch)) return;
+        gateway.setError(
+          messageFromError(error, gateway.t("app.openThreadFailed"), gateway.errorLabels),
+          { hostId, projectId, threadId: navigation.selectedThreadId },
+        );
+      }
     },
   };
 }

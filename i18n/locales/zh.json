@@ -257,6 +257,8 @@
     "send": "发送",
     "interruptTurn": "停止生成",
     "newThread": "新建",
+    "newThreadChooseHost": "选择主机",
+    "newThreadNoHosts": "请先添加主机，再开始新对话",
     "refresh": "刷新",
     "ctrlEnter": "Enter 发送，Shift Enter 换行",
     "selectThreadFirst": "先选择一个会话",

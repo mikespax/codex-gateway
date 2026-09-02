@@ -257,6 +257,8 @@
     "send": "Send",
     "interruptTurn": "Stop generation",
     "newThread": "New",
+    "newThreadChooseHost": "Choose a host",
+    "newThreadNoHosts": "Add a host before starting a new chat",
     "refresh": "Refresh",
     "ctrlEnter": "Enter sends, Shift Enter inserts a new line",
     "selectThreadFirst": "Select a thread first",

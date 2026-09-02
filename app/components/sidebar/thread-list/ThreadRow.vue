@@ -22,6 +22,7 @@ const props = defineProps<{
   status: ThreadRuntimeStatus;
   completionAttention?: boolean;
   subtitle?: string;
+  resourceUsage?: string | null;
   pinLabel: string;
   moveLabel?: string;
   showPinnedIcon?: boolean;
@@ -36,6 +37,11 @@ const emit = defineEmits<{
 }>();
 
 const pressHandlers = computed(() => props.longPressHandlers ?? {});
+const displaySubtitle = computed(() =>
+  [props.subtitle, props.resourceUsage]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .join(" · "),
+);
 </script>
 
 <template>
@@ -55,7 +61,7 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
         ]"
         @click="emit('open')"
       >
-        <SidebarRowLabel :title="titleForThread(thread)" :subtitle="subtitle">
+        <SidebarRowLabel :title="titleForThread(thread)" :subtitle="displaySubtitle || undefined">
           <template #title-prefix>
             <StarIcon
               v-if="showPinnedIcon"

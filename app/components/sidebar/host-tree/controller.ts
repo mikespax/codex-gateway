@@ -29,6 +29,7 @@ export interface HostTreeController {
   rename: (thread: SidebarThread & { hostId: number }) => void;
   threadRuntimeStatus: (hostId: number, threadId: string) => ThreadRuntimeStatus;
   threadCompletionAttention: (hostId: number, threadId: string) => boolean;
+  hostResourceUsage: (hostId: number) => string | null;
 }
 
 export const HOST_TREE_CONTROLLER: InjectionKey<Ref<HostTreeController>> =
