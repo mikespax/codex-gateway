@@ -45,7 +45,15 @@ export class HostMetricsManager {
     this.runtimes.delete(key);
   }
 
-  private ensureCollector(userId: number, host: HostRecord) {
+  /**
+   * Ensure that a configured host has a collector and an SSH connection behind it.
+   *
+   * Collectors used to be created only as a side effect of some other host operation emitting
+   * `ready`. That meant the host metrics endpoint could only report hosts the user had already
+   * opened. The endpoint now calls this method for every configured host, so metrics are also
+   * useful for hosts that have not been opened yet.
+   */
+  ensureCollector(userId: number, host: HostRecord) {
     const key = runtimeKey(userId, host.id);
     const existing = this.runtimes.get(key);
     if (existing !== undefined) {
@@ -72,7 +80,23 @@ export class HostMetricsManager {
       collector,
     };
     this.runtimes.set(key, runtime);
-    runtime.collector.start();
+    // The ready event starts the collector in the normal path; this continuation also covers pool
+    // implementations that do not emit ready themselves. Neither path creates a second SSH
+    // connection because the pool coalesces equivalent connect() calls.
+    void this.ssh
+      .connect(host)
+      .then(() => {
+        if (this.runtimes.get(key) === runtime) runtime.collector.start();
+      })
+      .catch((error: unknown) => {
+        if (this.runtimes.get(key) !== runtime) return;
+        this.setStatus(
+          userId,
+          host.id,
+          "error",
+          error instanceof Error ? error.message : "Unable to connect to host for metrics",
+        );
+      });
   }
 
   private acceptSample(

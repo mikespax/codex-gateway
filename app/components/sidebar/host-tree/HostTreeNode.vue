@@ -48,7 +48,7 @@ const controller = requireHostTreeController();
           <SidebarRowLabel
             :title="host.name"
             :subtitle="
-              [host.sshHost, controller.hostResourceUsage(host.id)].filter(Boolean).join(' · ')
+              [controller.hostResourceUsage(host.id), host.sshHost].filter(Boolean).join(' · ')
             "
           >
             <template #trailing>

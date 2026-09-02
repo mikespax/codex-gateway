@@ -5,7 +5,12 @@ import type { HostResourceUsageSummary } from "~~/shared/types";
 
 export default defineGatewayEventHandler((event): HostResourceUsageSummary[] => {
   const userId = event.context.auth!.user.id;
-  return hostStore.list().map((host) => {
+  // Start collectors for every configured host, including hosts that have not yet been opened in
+  // the Gateway. Secrets stay server-side; only the resulting numeric summary is returned below.
+  const hosts = hostStore.listWithSecret();
+  for (const host of hosts) hostMetricsManager.ensureCollector(userId, host);
+
+  return hosts.map((host) => {
     const snapshot = hostMetricsManager.snapshot(userId, host.id);
     const latest = snapshot.samples.at(-1);
     return {
