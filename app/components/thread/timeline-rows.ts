@@ -29,6 +29,7 @@ export type ThreadTimelineRow =
       segmentCount?: number;
       working?: boolean;
       startedAt?: number | null;
+      latestOperation?: string | null;
       footer?: boolean;
     }
   | {
@@ -57,6 +58,7 @@ export type ThreadTimelineRow =
       type: "workingStatus";
       turnId: string;
       startedAt: number | null;
+      latestOperation: string | null;
     };
 
 export interface ThreadTimelineTurnState {
@@ -118,6 +120,7 @@ export function buildThreadTimelineRows(input: {
             type: "workingStatus",
             turnId: turn.id,
             startedAt: timing.startedAt,
+            latestOperation: latestIntermediateOperation(segment.items),
           });
         }
         if (isLatestSegment) {
@@ -175,7 +178,9 @@ export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   if (row === undefined) return 96;
   if (row.type === "intermediateHeader") return 72;
   if (row.type === "turnDuration") return 28;
-  if (row.type === "workingStatus") return 36;
+  if (row.type === "workingStatus") {
+    return row.latestOperation !== null && row.latestOperation !== "" ? 52 : 36;
+  }
   return estimatedItemHeights[row.item.type] ?? 96;
 }
 
@@ -201,6 +206,31 @@ function presentIntermediateItems(
     count: items.length + (showWorkingStatus ? 1 : 0),
     showWorkingStatus,
   };
+}
+
+function latestIntermediateOperation(items: ThreadTimelineItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const operation = safeIntermediateOperation(items[index]!);
+    if (operation !== null) return operation;
+  }
+  return null;
+}
+
+function safeIntermediateOperation(item: ThreadTimelineItem) {
+  if (item.type === "commandExecution") {
+    return compactOperationText(commandDisplayLabel(item.command)) || "Command";
+  }
+  if (item.type === "fileChange") {
+    return "Updating files";
+  }
+  if (item.type === "webSearch") {
+    return compactOperationText(item.query) || "Web search";
+  }
+  return null;
+}
+
+function compactOperationText(value: string | null | undefined) {
+  return (value ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
 function isRoutineLiveActivity(item: ThreadTimelineItem) {
@@ -384,7 +414,11 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
     );
   }
   if (left.type === "workingStatus" && right.type === "workingStatus") {
-    return left.turnId === right.turnId && left.startedAt === right.startedAt;
+    return (
+      left.turnId === right.turnId &&
+      left.startedAt === right.startedAt &&
+      left.latestOperation === right.latestOperation
+    );
   }
   return false;
 }

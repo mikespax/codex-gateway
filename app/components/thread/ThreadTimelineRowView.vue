@@ -48,6 +48,7 @@ const emit = defineEmits<{
   <IntermediateWorkingStatus
     v-else-if="props.row.type === 'workingStatus'"
     :started-at="props.row.startedAt"
+    :latest-operation="props.row.latestOperation"
   />
   <TurnDurationLabel v-else :timing="props.row" />
 </template>
