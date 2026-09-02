@@ -24,8 +24,16 @@ test("Bark sends ordinary turn notifications and only notifies when an app-serve
     { timeout: 120_000 },
   );
   await expect.poll(async () => (await bark.readRequests()).length, { timeout: 30_000 }).toBe(1);
-  expect((await bark.readRequests())[0]?.title).toContain("Turn finished");
-  const turnToast = page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" });
+  const threadTitle = await page
+    .getByTestId(`thread-button-${threadId}`)
+    .locator("[title]")
+    .first()
+    .getAttribute("title");
+  expect(threadTitle).toBeTruthy();
+  const completionRequest = (await bark.readRequests())[0];
+  expect(completionRequest?.title).toBe(threadTitle);
+  expect(completionRequest?.body).toBe("");
+  const turnToast = page.locator("[data-sonner-toast]").filter({ hasText: threadTitle! });
   await expect(turnToast).toBeVisible();
   await turnToast.getByRole("button", { name: /Open thread|打开会话/ }).click();
   await expect(page).toHaveURL(new RegExp(`threadId=${threadId}`));
@@ -104,7 +112,9 @@ test("Bark keeps monitoring an active main turn after the last browser closes", 
   // The background monitor must own it until turn/completed so VS Code-only and closed-page
   // workflows receive the same completion notification as an open Gateway page.
   await expect.poll(async () => (await bark.readRequests()).length, { timeout: 60_000 }).toBe(1);
-  expect((await bark.readRequests())[0]?.title).toContain("Turn finished");
+  const completionRequest = (await bark.readRequests())[0];
+  expect(completionRequest?.title).not.toContain("Turn finished");
+  expect(completionRequest?.body).toBe("");
 });
 
 test("Bark does not notify when the user stops an active turn", async ({
@@ -137,6 +147,7 @@ test("Bark does not notify when the user stops an active turn", async ({
     /Stop generation|停止生成/,
     { timeout: 30_000 },
   );
+  const toastCountBeforeStop = await page.locator("[data-sonner-toast]").count();
   await page.getByTestId("stop-turn-button").click();
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
     "aria-label",
@@ -148,9 +159,7 @@ test("Bark does not notify when the user stops an active turn", async ({
   // to publish if the interrupted turn were incorrectly considered eligible.
   await page.waitForTimeout(2_000);
   expect(await bark.readRequests()).toHaveLength(0);
-  await expect(
-    page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" }),
-  ).toHaveCount(0);
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(toastCountBeforeStop);
 });
 
 test("plan-mode user questions render and notify through Sonner and Bark", async ({

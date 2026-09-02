@@ -1,4 +1,4 @@
-import type { GatewayEvent, ThreadGoalStatus, ThreadRuntimeStatus } from "~~/shared/types";
+import type { GatewayEvent, ThreadGoalStatus } from "~~/shared/types";
 import { terminalTurnStatus } from "~~/shared/thread-runtime-status";
 import { gatewayMemoryState } from "../state/memory";
 import { hostStore } from "../state/hosts";
@@ -19,8 +19,8 @@ export function threadTurnCompletedNotification(event: GatewayEvent): ServerNoti
   }
   return {
     key: `thread-terminal:${event.hostId}:${event.threadId}:turn:${turnId}:${status}`,
-    title: `${threadTitle(event.hostId, event.threadId)} · Turn finished`,
-    body: `${hostTitle(event.hostId)} thread status: ${turnStatusLabel(status)}. You can continue with the next step.`,
+    title: threadTitle(event.hostId, event.threadId),
+    body: "",
     group: "Codex Gateway",
     target: notificationTarget(event),
   };
@@ -106,17 +106,6 @@ function threadTitle(hostId: number, threadId: string) {
 
 function hostTitle(hostId: number) {
   return firstNonEmptyString([hostStore.get(hostId)?.name]) ?? `Host ${hostId}`;
-}
-
-function turnStatusLabel(status: ThreadRuntimeStatus) {
-  const labels: Record<ThreadRuntimeStatus, string> = {
-    idle: "idle",
-    running: "running",
-    completed: "completed",
-    failed: "failed",
-    interrupted: "interrupted",
-  };
-  return labels[status];
 }
 
 function goalStatusLabel(status: ThreadGoalStatus) {
