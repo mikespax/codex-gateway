@@ -30,13 +30,13 @@ if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
     printf '@@UNSUPPORTED\n'
     exit 0
   fi
-  speculative_pages="\${speculative_pages:-0}"
+  if [ -z "$speculative_pages" ]; then speculative_pages=0; fi
   memory_available="$(awk -v total="$memory_total" -v page_size="$page_size" -v free="$free_pages" -v inactive="$inactive_pages" -v speculative="$speculative_pages" 'BEGIN { if (total !~ /^[0-9]+$/ || page_size !~ /^[0-9]+$/ || free !~ /^[0-9]+$/ || inactive !~ /^[0-9]+$/ || speculative !~ /^[0-9]+$/ || total <= 0 || page_size <= 0) exit 1; printf "%.0f %.0f", total / 1024, (free + inactive + speculative) * page_size / 1024 }')" || {
     printf '@@UNSUPPORTED\n'
     exit 0
   }
-  memory_total_kib="\${memory_available%% *}"
-  memory_available_kib="\${memory_available#* }"
+  memory_total_kib="$(printf '%s\n' "$memory_available" | awk '{ print $1 }')"
+  memory_available_kib="$(printf '%s\n' "$memory_available" | awk '{ print $2 }')"
   printf '@@BEGIN\t%s\n' "$sampled_at"
   printf '@@CPU\n'
   printf 'cpu_percent %s\n' "$cpu_percent"
