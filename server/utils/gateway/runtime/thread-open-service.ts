@@ -1,4 +1,4 @@
-import type { AppServerThread, HostRecord } from "~~/shared/types";
+import type { AppServerThread, HostRecord, ThreadRuntimeStatus } from "~~/shared/types";
 import { INITIAL_TURN_PAGE_LIMIT } from "~~/shared/config";
 import { threadTurnsFromHistory } from "~~/shared/thread-history/shape";
 import { projectThreadTimelineHistory } from "~~/shared/thread-history/timeline";
@@ -46,11 +46,18 @@ export class ThreadOpenService {
     activationController?: ThreadController,
     projectCwd?: string | null,
   ) {
-    const cachedSnapshot =
-      threadSnapshotStore.get(host.id, threadId) ??
-      (await this.restoreVerifiedPersistentSnapshot(host, threadId, projectId));
+    const memorySnapshot = threadSnapshotStore.get(host.id, threadId);
+    const persistentCandidate =
+      memorySnapshot === null
+        ? await this.restoreVerifiedPersistentSnapshot(host, threadId, projectId)
+        : null;
+    const cachedSnapshot = memorySnapshot ?? persistentCandidate?.snapshot ?? null;
+    const fallbackRuntimeStatus = persistentCandidate?.authoritativeStatus ?? null;
     if (cachedSnapshot) {
-      if (snapshotSatisfiesTurnLimit(cachedSnapshot, limit)) {
+      if (
+        persistentCandidate?.verified !== false &&
+        snapshotSatisfiesTurnLimit(cachedSnapshot, limit)
+      ) {
         // Runtime notifications are projected into this snapshot as they arrive, including the
         // active Turn's cumulative output and status. Re-reading a running thread here would make
         // every browser activation call thread/turns/list again. For legacy rollouts app-server
@@ -60,13 +67,24 @@ export class ThreadOpenService {
         // use the authoritative refresh path explicitly.
         return this.snapshotResult(host, threadId, projectId, cachedSnapshot, projectCwd);
       }
-      runtimeLog("thread cache depth refresh", {
+      if (persistentCandidate?.verified !== false) {
+        runtimeLog("thread cache depth refresh", {
+          hostId: host.id,
+          threadId,
+          cachedTurns: threadTurnsFromHistory(cachedSnapshot.history).length,
+          requestedTurns: limit,
+        });
+      }
+    } else {
+      runtimeLog("thread cache miss", {
         hostId: host.id,
         threadId,
-        cachedTurns: threadTurnsFromHistory(cachedSnapshot.history).length,
-        requestedTurns: limit,
+        limit,
       });
-      return this.refreshThreadState(
+    }
+
+    try {
+      return await this.refreshThreadState(
         host,
         threadId,
         projectId,
@@ -74,28 +92,37 @@ export class ThreadOpenService {
         activationController,
         projectCwd,
       );
+    } catch (error) {
+      // A transport/RPC failure must not turn a materialized conversation into an empty view.
+      // Keep the last durable snapshot as a visible, reconnectable fallback; the next activation
+      // will retry the authoritative refresh and replace it when the app-server is reachable.
+      if (cachedSnapshot !== null && snapshotSatisfiesTurnLimit(cachedSnapshot, limit)) {
+        threadSnapshotStore.hydratePersistent(host.id, threadId, cachedSnapshot);
+        runtimeLog("thread cache fallback", {
+          hostId: host.id,
+          threadId,
+          cachedTurns: threadTurnsFromHistory(cachedSnapshot.history).length,
+          requestedTurns: limit,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return this.snapshotResult(
+          host,
+          threadId,
+          projectId,
+          cachedSnapshot,
+          projectCwd,
+          fallbackRuntimeStatus,
+        );
+      }
+      throw error;
     }
-
-    runtimeLog("thread cache miss", {
-      hostId: host.id,
-      threadId,
-      limit,
-    });
-    return this.refreshThreadState(
-      host,
-      threadId,
-      projectId,
-      limit,
-      activationController,
-      projectCwd,
-    );
   }
 
   private async restoreVerifiedPersistentSnapshot(
     host: HostRecord,
     threadId: string,
     projectId: number | null,
-  ) {
+  ): Promise<PersistentThreadSnapshotCandidate | null> {
     const snapshot = threadSnapshotStore.restorePersistent(host.id, threadId);
     if (snapshot === null) return null;
 
@@ -121,7 +148,7 @@ export class ThreadOpenService {
         threadId,
         message: error instanceof Error ? error.message : String(error),
       });
-      return null;
+      return { snapshot, verified: false, authoritativeStatus: null };
     }
 
     const status = runtimeStatusFromTopLevelThreadState(authoritativeThread);
@@ -130,15 +157,15 @@ export class ThreadOpenService {
       authoritativeThread.updatedAt !== snapshot.thread.updatedAt ||
       status === "running"
     ) {
-      threadSnapshotStore.deletePersistent(host.id, threadId);
       runtimeLog("persistent thread cache rejected", {
         hostId: host.id,
         threadId,
         cachedUpdatedAt: snapshot.thread.updatedAt,
         authoritativeUpdatedAt: authoritativeThread.updatedAt,
         authoritativeStatus: status,
+        action: "retained_for_fallback",
       });
-      return null;
+      return { snapshot, verified: false, authoritativeStatus: status };
     }
 
     // Seed both volatile indexes from the authoritative metadata. Keep the cached history and
@@ -155,7 +182,7 @@ export class ThreadOpenService {
       threadId,
       updatedAt: verifiedSnapshot.thread.updatedAt,
     });
-    return verifiedSnapshot;
+    return { snapshot: verifiedSnapshot, verified: true, authoritativeStatus: status };
   }
 
   startedThreadResult(host: HostRecord, projectId: number | null, rawResult: unknown) {
@@ -325,6 +352,7 @@ export class ThreadOpenService {
     projectId: number | null,
     snapshot: ThreadOpenSnapshot,
     projectCwd?: string | null,
+    runtimeStatusOverride?: ThreadRuntimeStatus | null,
   ) {
     const recentEvents = gatewayEventStore.list(host.id, threadId, 0, 200);
     const resolvedProjectId = resolveProjectId(
@@ -341,7 +369,9 @@ export class ThreadOpenService {
     return {
       thread: gatewayThreadFromAppServer(host.id, resolvedProjectId, snapshot.thread),
       history: snapshot.history,
-      runtimeStatus: runtimeStatusFromThreadState(snapshot.thread, snapshot.history, recentEvents),
+      runtimeStatus:
+        runtimeStatusOverride ??
+        runtimeStatusFromThreadState(snapshot.thread, snapshot.history, recentEvents),
       projectId: resolvedProjectId,
       project: resolvedProjectId === null ? null : projectStore.get(resolvedProjectId),
       turnsPage: snapshot.turnsPage,
@@ -448,6 +478,12 @@ export class ThreadOpenService {
 }
 
 type ReturnTypeResult = Awaited<ReturnType<ThreadOpenService["performThreadStateRefresh"]>>;
+
+interface PersistentThreadSnapshotCandidate {
+  snapshot: ThreadOpenSnapshot;
+  verified: boolean;
+  authoritativeStatus: ThreadRuntimeStatus | null;
+}
 
 function snapshotSatisfiesTurnLimit(snapshot: ThreadOpenSnapshot, limit: number) {
   // A cache wider than the caller's first-page preference is still a valid hit. Truncating it

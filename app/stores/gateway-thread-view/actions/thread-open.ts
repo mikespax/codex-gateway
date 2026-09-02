@@ -1,4 +1,4 @@
-import type { ComposerTurnOptions } from "~~/shared/types";
+import type { ComposerTurnOptions, ThreadHistoryState } from "~~/shared/types";
 import { INITIAL_TURN_PAGE_LIMIT } from "~~/shared/config";
 import { threadTurnsFromHistory } from "~~/shared/thread-history/shape";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
@@ -250,9 +250,15 @@ export function createThreadOpenActions() {
       if (hostId === null || threadId === null || threadId === "") return;
       const viewEpoch = views.viewEpoch;
       const sessionIsCurrent = captureSessionEpoch();
+      const limit = retainedTurnLimit(views.history);
       if (options.showLoading === true) views.loading = true;
       try {
-        const result = await requestActivateThreadSnapshot({ hostId, projectId, threadId });
+        const result = await requestActivateThreadSnapshot({
+          hostId,
+          projectId,
+          threadId,
+          limit,
+        });
         if (
           !sessionIsCurrent() ||
           views.viewEpoch !== viewEpoch ||
@@ -367,11 +373,13 @@ async function recoverThreadSnapshot(hostId: number, threadId: string) {
   }
 
   const sessionIsCurrent = captureSessionEpoch();
+  const limit = retainedTurnLimit(selected ? views.history : (existing?.history ?? null));
   try {
     const result = await requestActivateThreadSnapshot({
       hostId,
       projectId: existing?.projectId ?? navigation.selectedProjectId,
       threadId,
+      limit,
     });
     if (!sessionIsCurrent()) return;
     const stillSelected =
@@ -501,4 +509,8 @@ async function refreshGoalAfterOpen(hostId: number, threadId: string) {
       { hostId, threadId, projectId: navigation.selectedProjectId },
     );
   }
+}
+
+function retainedTurnLimit(history: ThreadHistoryState | null) {
+  return Math.max(INITIAL_TURN_PAGE_LIMIT, threadTurnsFromHistory(history).length);
 }

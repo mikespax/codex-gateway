@@ -219,6 +219,50 @@ test("IndexedDB restores a thread immediately and then accepts the authoritative
     .toContain("server refreshed turn");
 });
 
+test("event-gap recovery retains the loaded history depth", async ({ page }) => {
+  await openApp(page);
+  const threadId = "e2e-event-gap-retains-history-depth";
+  const history = {
+    thread: { id: threadId, turns: buildTextTurns(1, 5, "gap recovery turn") },
+  };
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Gap Recovery" },
+    history,
+  });
+  await installRealtimeThreadSnapshotMock(page, {
+    snapshots: {
+      [threadId]: {
+        thread: { id: threadId, name: "Gap Recovery" },
+        history,
+        projectId: 1,
+      },
+    },
+  });
+
+  await page.evaluate((threadId) => {
+    const realtime = window.__codexGatewayE2e?.realtime;
+    if (!realtime) throw new Error("Gateway E2E driver is unavailable");
+    realtime.receiveServerMessage({
+      type: "thread.events.gap",
+      hostId: 1,
+      threadId,
+      afterId: 0,
+      lastEventId: 0,
+      eventEpoch: "e2e-event-epoch",
+    });
+  }, threadId);
+
+  await expect.poll(() => threadActivateRequests(page).then((requests) => requests.length)).toBe(1);
+  expect(await threadActivateRequests(page)).toEqual([
+    expect.objectContaining({ threadId, limit: 5 }),
+  ]);
+  await expect
+    .poll(() => page.evaluate(() => window.__codexGatewayE2e?.views.history?.thread.turns.length))
+    .toBe(5);
+});
+
 function indexedDbContains(page: Page, marker: string) {
   return page.evaluate(async (marker) => {
     const databases = await indexedDB.databases();
