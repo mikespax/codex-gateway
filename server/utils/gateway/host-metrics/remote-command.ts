@@ -7,11 +7,58 @@ export function hostMetricsRemoteCommand(includeGpuProcesses: boolean) {
 function script(includeGpuProcesses: boolean) {
   return String.raw`
 set -u
+export LC_ALL=C
+if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
+  if ! command -v sysctl >/dev/null 2>&1 || ! command -v vm_stat >/dev/null 2>&1 || ! command -v awk >/dev/null 2>&1 || ! command -v tr >/dev/null 2>&1; then
+    printf '@@UNSUPPORTED\n'
+    exit 0
+  fi
+  sampled_at_seconds="$(date +%s 2>/dev/null || true)"
+  case "$sampled_at_seconds" in
+    ''|*[!0-9]*) printf '@@UNSUPPORTED\n'; exit 0 ;;
+  esac
+  sampled_at="\${sampled_at_seconds}000"
+  cp_time="$(sysctl -n kern.cp_time 2>/dev/null || true)"
+  load_average="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' || true)"
+  memory_total="$(sysctl -n hw.memsize 2>/dev/null || true)"
+  vm_stat_output="$(vm_stat 2>/dev/null || true)"
+  page_size="$(printf '%s\n' "$vm_stat_output" | awk '/page size of/ { gsub(/[^0-9]/, "", $8); print $8; exit }')"
+  free_pages="$(printf '%s\n' "$vm_stat_output" | awk -F: '/^Pages free:/ { gsub(/[^0-9]/, "", $2); print $2; exit }')"
+  inactive_pages="$(printf '%s\n' "$vm_stat_output" | awk -F: '/^Pages inactive:/ { gsub(/[^0-9]/, "", $2); print $2; exit }')"
+  speculative_pages="$(printf '%s\n' "$vm_stat_output" | awk -F: '/^Pages speculative:/ { gsub(/[^0-9]/, "", $2); print $2; exit }')"
+  if [ -z "$page_size" ] || [ -z "$free_pages" ] || [ -z "$inactive_pages" ] || [ -z "$memory_total" ]; then
+    printf '@@UNSUPPORTED\n'
+    exit 0
+  fi
+  speculative_pages="\${speculative_pages:-0}"
+  memory_available="$(awk -v total="$memory_total" -v page_size="$page_size" -v free="$free_pages" -v inactive="$inactive_pages" -v speculative="$speculative_pages" 'BEGIN { if (total !~ /^[0-9]+$/ || page_size !~ /^[0-9]+$/ || free !~ /^[0-9]+$/ || inactive !~ /^[0-9]+$/ || speculative !~ /^[0-9]+$/ || total <= 0 || page_size <= 0) exit 1; printf "%.0f %.0f", total / 1024, (free + inactive + speculative) * page_size / 1024 }')" || {
+    printf '@@UNSUPPORTED\n'
+    exit 0
+  }
+  memory_total_kib="\${memory_available%% *}"
+  memory_available_kib="\${memory_available#* }"
+  printf '@@BEGIN\t%s\n' "$sampled_at"
+  printf '@@CPU\n'
+  printf 'cpu %s\n' "$cp_time" | awk '{ print $1, $2, $3, $4, $5 }'
+  printf '@@LOAD\n'
+  printf '%s\n' "$load_average" | awk '{ print $1, $2, $3 }'
+  printf '@@MEM\n'
+  printf 'MemTotal: %s kB\n' "$memory_total_kib"
+  printf 'MemAvailable: %s kB\n' "$memory_available_kib"
+  printf '@@ROUTE\n'
+  printf '@@NET\n'
+  printf '@@BLOCK\n'
+  printf '@@DISK\n'
+  printf '@@FS\n'
+  printf '@@GPU\n'
+${includeGpuProcesses ? gpuProcessScript() : ""}
+  printf '@@END\n'
+  exit 0
+fi
 if [ ! -r /proc/stat ] || [ ! -r /proc/meminfo ] || [ ! -r /proc/net/dev ] || [ ! -r /proc/diskstats ]; then
   printf '@@UNSUPPORTED\n'
   exit 0
 fi
-export LC_ALL=C
 sampled_at="$(date +%s%3N 2>/dev/null || printf '%s000' "$(date +%s)")"
 printf '@@BEGIN\t%s\n' "$sampled_at"
 printf '@@CPU\n'
