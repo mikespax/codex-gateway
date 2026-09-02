@@ -137,12 +137,24 @@ function parseFrame(frame: SampleFrame): RawHostMetricsSample {
 }
 
 function parseCpu(lines: string[]) {
+  const directUsage = /^cpu_percent\s+([0-9]+(?:\.[0-9]+)?)$/.exec(lines[0]?.trim() ?? "");
+  if (directUsage !== null) {
+    const directUsagePercent = Number(directUsage[1]);
+    if (
+      !Number.isFinite(directUsagePercent) ||
+      directUsagePercent < 0 ||
+      directUsagePercent > 100
+    ) {
+      throw new Error("Invalid direct CPU usage response");
+    }
+    return { total: 0, idle: 0, directUsagePercent };
+  }
   const values = lines[0]?.trim().split(/\s+/).slice(1).map(Number) ?? [];
   if (values.length < 4 || values.some((value) => !Number.isFinite(value))) {
     throw new Error("Invalid /proc/stat CPU counters");
   }
   const total = values.slice(0, 8).reduce((sum, value) => sum + value, 0);
-  return { total, idle: values[3]! + (values[4] ?? 0) };
+  return { total, idle: values[3]! + (values[4] ?? 0), directUsagePercent: null };
 }
 
 function parseLoad(lines: string[]): [number, number, number] {

@@ -8,6 +8,7 @@ import type {
 export interface RawCpuCounters {
   total: number;
   idle: number;
+  directUsagePercent: number | null;
 }
 
 export interface RawNetworkCounters {

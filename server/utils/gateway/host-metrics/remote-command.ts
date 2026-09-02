@@ -9,7 +9,7 @@ function script(includeGpuProcesses: boolean) {
 set -u
 export LC_ALL=C
 if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
-  if ! command -v sysctl >/dev/null 2>&1 || ! command -v vm_stat >/dev/null 2>&1 || ! command -v awk >/dev/null 2>&1 || ! command -v tr >/dev/null 2>&1; then
+  if ! command -v sysctl >/dev/null 2>&1 || ! command -v vm_stat >/dev/null 2>&1 || ! command -v top >/dev/null 2>&1 || ! command -v awk >/dev/null 2>&1 || ! command -v tr >/dev/null 2>&1; then
     printf '@@UNSUPPORTED\n'
     exit 0
   fi
@@ -17,8 +17,8 @@ if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
   case "$sampled_at_seconds" in
     ''|*[!0-9]*) printf '@@UNSUPPORTED\n'; exit 0 ;;
   esac
-  sampled_at="\${sampled_at_seconds}000"
-  cp_time="$(sysctl -n kern.cp_time 2>/dev/null || true)"
+  sampled_at="$sampled_at_seconds""000"
+  cpu_percent="$(top -l 1 -n 0 2>/dev/null | awk -F'[:,%]' '/^CPU usage:/ { user = $2 + 0; kernel = $4 + 0; printf "%.2f", user + kernel; exit }')"
   load_average="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' || true)"
   memory_total="$(sysctl -n hw.memsize 2>/dev/null || true)"
   vm_stat_output="$(vm_stat 2>/dev/null || true)"
@@ -26,7 +26,7 @@ if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
   free_pages="$(printf '%s\n' "$vm_stat_output" | awk -F: '/^Pages free:/ { gsub(/[^0-9]/, "", $2); print $2; exit }')"
   inactive_pages="$(printf '%s\n' "$vm_stat_output" | awk -F: '/^Pages inactive:/ { gsub(/[^0-9]/, "", $2); print $2; exit }')"
   speculative_pages="$(printf '%s\n' "$vm_stat_output" | awk -F: '/^Pages speculative:/ { gsub(/[^0-9]/, "", $2); print $2; exit }')"
-  if [ -z "$page_size" ] || [ -z "$free_pages" ] || [ -z "$inactive_pages" ] || [ -z "$memory_total" ]; then
+  if [ -z "$cpu_percent" ] || [ -z "$page_size" ] || [ -z "$free_pages" ] || [ -z "$inactive_pages" ] || [ -z "$memory_total" ]; then
     printf '@@UNSUPPORTED\n'
     exit 0
   fi
@@ -39,7 +39,7 @@ if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
   memory_available_kib="\${memory_available#* }"
   printf '@@BEGIN\t%s\n' "$sampled_at"
   printf '@@CPU\n'
-  printf 'cpu %s\n' "$cp_time" | awk '{ print $1, $2, $3, $4, $5 }'
+  printf 'cpu_percent %s\n' "$cpu_percent"
   printf '@@LOAD\n'
   printf '%s\n' "$load_average" | awk '{ print $1, $2, $3 }'
   printf '@@MEM\n'
