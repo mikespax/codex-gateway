@@ -43,7 +43,7 @@ import {
   messageFromError,
   titleForThread,
 } from "@/stores/gateway/thread-utils/identity";
-import type { ThreadMoveResult } from "~~/shared/types";
+import type { ThreadMoveResult, ThreadNativeMigrationResult } from "~~/shared/types";
 
 const PINNED_GROUPS_KEY = "codex-gateway-pinned-groups";
 const SIDEBAR_SECTIONS_KEY = "codex-gateway-sidebar-sections";
@@ -189,6 +189,7 @@ function requestThreadMove(thread: ThreadMoveSourceInput) {
 }
 
 async function submitThreadMove(input: {
+  mode: "handoff" | "native";
   targetHostId: number;
   targetProjectId: number | null;
   targetCwd: string | null;
@@ -198,6 +199,55 @@ async function submitThreadMove(input: {
   threadMoveSubmitting.value = true;
   threadMoveError.value = "";
   try {
+    if (input.mode === "native") {
+      const result = await gatewayApi<ThreadNativeMigrationResult>("/api/threads/migrate", {
+        method: "POST",
+        body: {
+          sourceHostId: source.hostId,
+          sourceThreadId: source.threadId,
+          targetHostId: input.targetHostId,
+          targetCwd: input.targetCwd,
+        },
+      });
+      const targetProject = catalog.projects.find(
+        (project) =>
+          project.hostId === result.target.hostId &&
+          (project.id === input.targetProjectId || project.remotePath === result.target.cwd),
+      );
+      const targetHost = hosts.value.find((host) => host.id === result.target.hostId);
+      try {
+        await config.setPinnedThread(
+          {
+            hostId: result.target.hostId,
+            projectId: targetProject?.id ?? null,
+            threadId: result.target.threadId,
+            title: source.title,
+            subtitle: result.target.cwd,
+            projectName: targetProject?.name ?? null,
+            updatedAt: Math.floor(Date.now() / 1000),
+          },
+          true,
+        );
+      } catch (error) {
+        // The migration is already committed by the server. A pin-sync failure must not make the
+        // user retry the operation and repeat a native transfer with the same thread ID.
+        console.warn("[gateway] migrated thread could not be pinned", {
+          targetHostId: result.target.hostId,
+          targetThreadId: result.target.threadId,
+          error,
+        });
+      }
+      threadMove.value = null;
+      await threadView.openThread(result.target.threadId, {
+        hostId: result.target.hostId,
+        projectId: targetProject?.id ?? null,
+      });
+      if (targetHost !== undefined) {
+        catalog.setHostConnectionStatus(targetHost.id, "connected");
+      }
+      return;
+    }
+
     const result = await gatewayApi<ThreadMoveResult>("/api/threads/move", {
       method: "POST",
       body: {

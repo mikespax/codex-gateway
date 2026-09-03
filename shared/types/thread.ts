@@ -74,6 +74,57 @@ export interface ThreadMoveResult {
   };
 }
 
+export interface ThreadNativeMigrationResult {
+  mode: "native";
+  source: {
+    hostId: number;
+    threadId: string;
+    rolloutPath: string;
+    historyMode: "legacy" | "paginated";
+    turnCount: number;
+    queueCount: number;
+  };
+  target: {
+    hostId: number;
+    threadId: string;
+    rolloutPath: string;
+    cwd: string;
+    requestedCwd: string;
+    historyMode: "legacy" | "paginated";
+    turnCount: number;
+    queueCount: number;
+  };
+  transfer: {
+    files: number;
+    bytes: number;
+    rollouts: {
+      files: number;
+      bytes: number;
+    };
+    attachments: {
+      files: number;
+      bytes: number;
+    };
+  };
+  verification: {
+    sameThreadId: true;
+    sameRolloutRelativePath: true;
+    metadataParity: true;
+    historyParity: true;
+    descendantsVerified: true;
+    goalsVerified: true;
+    queuesVerified: true;
+  };
+  descendants: Array<{
+    threadId: string;
+    parentThreadId: string | null;
+    rolloutPath: string;
+    targetRolloutPath: string;
+    turnCount: number;
+    queueCount: number;
+  }>;
+}
+
 export type ThreadMoveReadinessStatus =
   | "ready"
   | "source_workspace_missing"

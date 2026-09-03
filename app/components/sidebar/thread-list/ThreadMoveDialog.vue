@@ -39,13 +39,21 @@ const props = defineProps<{
   error?: string;
 }>();
 
+type ThreadMoveMode = "handoff" | "native";
+
 const emit = defineEmits<{
   "update:open": [open: boolean];
   submit: [
-    input: { targetHostId: number; targetProjectId: number | null; targetCwd: string | null },
+    input: {
+      mode: ThreadMoveMode;
+      targetHostId: number;
+      targetProjectId: number | null;
+      targetCwd: string | null;
+    },
   ];
 }>();
 
+const mode = ref<ThreadMoveMode>("handoff");
 const targetHostId = ref<number | null>(null);
 const targetProjectId = ref<number | null>(null);
 const targetProjectChoice = ref<"custom" | "preset" | string>("custom");
@@ -91,7 +99,13 @@ const readinessMessageKey: Record<ThreadMoveReadinessStatus, string> = {
 
 const { t } = useI18n();
 const readinessMessage = computed(() =>
-  readiness.value === null ? "" : t(readinessMessageKey[readiness.value.status]),
+  readiness.value === null
+    ? ""
+    : t(
+        readiness.value.status === "ready" && mode.value === "native"
+          ? "app.moveThreadNativeReadinessReady"
+          : readinessMessageKey[readiness.value.status],
+      ),
 );
 const operationsFallbackMessage = computed(() => {
   const fallback = readiness.value;
@@ -109,6 +123,10 @@ watch(
     else clearReadiness();
   },
 );
+
+watch(mode, () => {
+  if (props.open) void refreshReadiness();
+});
 
 watch(targetHostId, () => {
   operationsFallbackAppliedKey.value = null;
@@ -149,6 +167,7 @@ function markTargetCwdEdited() {
 }
 
 function reset() {
+  mode.value = "handoff";
   const firstHost = targetHosts.value[0];
   targetHostId.value = firstHost?.id ?? null;
   configureTarget(firstHost);
@@ -197,6 +216,7 @@ function sourceWorkspaceName(sourceCwd: string | null) {
 function submit() {
   if (!canSubmit.value || targetHostId.value === null) return;
   emit("submit", {
+    mode: mode.value,
     targetHostId: targetHostId.value,
     targetProjectId: targetProjectId.value,
     targetCwd: targetCwd.value.trim() || null,
@@ -297,9 +317,31 @@ async function prepareWorkspace() {
         <DialogHeader>
           <DialogTitle>{{ $t("app.moveThreadTitle") }}</DialogTitle>
           <DialogDescription>
-            {{ $t("app.moveThreadDescription", { title: sourceTitle }) }}
+            {{
+              $t(
+                mode === "native" ? "app.moveThreadNativeDescription" : "app.moveThreadDescription",
+                { title: sourceTitle },
+              )
+            }}
           </DialogDescription>
         </DialogHeader>
+
+        <div class="grid gap-2">
+          <Label for="move-thread-mode">{{ $t("app.moveThreadMode") }}</Label>
+          <Select
+            :model-value="mode"
+            :disabled="submitting || preparing"
+            @update:model-value="mode = $event === 'native' ? 'native' : 'handoff'"
+          >
+            <SelectTrigger id="move-thread-mode" data-testid="move-thread-mode" class="w-full">
+              <SelectValue :placeholder="$t('app.moveThreadMode')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="handoff">{{ $t("app.moveThreadModeHandoff") }}</SelectItem>
+              <SelectItem value="native">{{ $t("app.moveThreadModeNative") }}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div class="grid gap-2">
           <Label for="move-thread-host">{{ $t("app.moveThreadTargetHost") }}</Label>
@@ -373,7 +415,12 @@ async function prepareWorkspace() {
             :placeholder="$t('app.moveThreadTargetPathPlaceholder')"
             @update:model-value="markTargetCwdEdited"
           />
-          <p class="text-xs leading-5 text-ink-muted">{{ $t("app.moveThreadReconcileNotice") }}</p>
+          <p v-if="mode === 'native'" class="text-xs leading-5 text-warning">
+            {{ $t("app.moveThreadNativeWarning") }}
+          </p>
+          <p v-else class="text-xs leading-5 text-ink-muted">
+            {{ $t("app.moveThreadReconcileNotice") }}
+          </p>
         </div>
 
         <div
@@ -431,7 +478,7 @@ async function prepareWorkspace() {
             {{ $t("app.cancel") }}
           </Button>
           <Button type="submit" data-testid="move-thread-submit" :disabled="!canSubmit">
-            {{ $t("app.moveThreadAction") }}
+            {{ $t(mode === "native" ? "app.moveThreadNativeAction" : "app.moveThreadAction") }}
           </Button>
         </DialogFooter>
       </form>

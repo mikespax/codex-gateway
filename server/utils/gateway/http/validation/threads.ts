@@ -61,6 +61,29 @@ export const threadMoveSchema = z
     path: ["targetHostId"],
   });
 
+/** Native migration is an explicit rollout transfer and never a transcript handoff. */
+export const threadNativeMigrationSchema = z
+  .object({
+    sourceHostId: z.coerce.number().int().positive(),
+    sourceThreadId: z.string().trim().min(1),
+    sourceRolloutPath: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => value.startsWith("/"), "Source rollout path must be absolute")
+      .optional(),
+    targetHostId: z.coerce.number().int().positive(),
+    targetCwd: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => value.startsWith("/"), "Target working directory must be absolute"),
+  })
+  .refine((input) => input.sourceHostId !== input.targetHostId, {
+    message: "Choose a different target host",
+    path: ["targetHostId"],
+  });
+
 export const threadMoveReadinessSchema = z
   .object({
     sourceHostId: z.coerce.number().int().positive(),
