@@ -1,6 +1,9 @@
 import type { HostRecord, ThreadSettingsState } from "~~/shared/types";
 import type { ControllerRegistry } from "./controller-registry";
-import { buildAppServerCollaborationMode } from "../protocol/thread-payload";
+import {
+  buildAppServerCollaborationMode,
+  GATEWAY_APPROVAL_POLICY,
+} from "../protocol/thread-payload";
 
 export class ThreadSettingsService {
   constructor(private readonly registry: ControllerRegistry) {}
@@ -17,7 +20,9 @@ export class ThreadSettingsService {
     if ("model" in input) params.model = input.model;
     if ("effort" in input) params.effort = input.effort;
     if ("serviceTier" in input) params.serviceTier = input.serviceTier;
-    if ("approvalPolicy" in input) params.approvalPolicy = input.approvalPolicy;
+    // Full access is a Gateway-wide invariant. Ignore stale browser values and keep legacy
+    // threads from reintroducing an approval prompt through the settings endpoint.
+    params.approvalPolicy = GATEWAY_APPROVAL_POLICY;
     if (input.collaborationMode !== null && input.collaborationMode !== undefined) {
       params.collaborationMode = buildAppServerCollaborationMode(input.collaborationMode);
     }

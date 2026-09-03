@@ -94,5 +94,7 @@ export interface HostResourceUsageSummary {
   status: HostMetricsCollectorStatus;
   cpuPercent: number | null;
   memoryPercent: number | null;
+  /** Root filesystem utilization, rounded to a whole percent when available. */
+  diskPercent: number | null;
   sampledAt: string | null;
 }

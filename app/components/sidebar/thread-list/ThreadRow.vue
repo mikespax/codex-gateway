@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { StarIcon } from "@lucide/vue";
+import { DatabaseIcon, StarIcon } from "@lucide/vue";
 import { computed } from "vue";
 import { Button } from "@codex-gateway/ui/button";
 import {
@@ -14,6 +14,7 @@ import { completionAttentionClass, selectedRowClass } from "../sidebar-utils";
 import SidebarRowLabel from "../SidebarRowLabel.vue";
 import ThreadStatusIndicator from "./ThreadStatusIndicator.vue";
 import type { SidebarThreadRow } from "../sidebar-types";
+import { formatThreadSize, threadStorageTone, threadStorageToneClass } from "./thread-size";
 
 const props = defineProps<{
   thread: SidebarThreadRow;
@@ -23,6 +24,7 @@ const props = defineProps<{
   completionAttention?: boolean;
   subtitle?: string;
   resourceUsage?: string | null;
+  threadBytes?: number | null;
   pinLabel: string;
   moveLabel?: string;
   moveHostLabel?: string;
@@ -39,10 +41,17 @@ const emit = defineEmits<{
 }>();
 
 const pressHandlers = computed(() => props.longPressHandlers ?? {});
-const displaySubtitle = computed(() =>
-  [props.subtitle, props.resourceUsage]
-    .filter((value) => value !== undefined && value !== null && value !== "")
-    .join(" · "),
+const formattedThreadSize = computed(() => formatThreadSize(props.threadBytes));
+const threadSizeClass = computed(
+  () => threadStorageToneClass[threadStorageTone(props.threadBytes)],
+);
+const hasSubtitle = computed(
+  () =>
+    (props.subtitle !== undefined && props.subtitle !== null && props.subtitle !== "") ||
+    (props.resourceUsage !== undefined &&
+      props.resourceUsage !== null &&
+      props.resourceUsage !== "") ||
+    props.threadBytes !== undefined,
 );
 </script>
 
@@ -63,12 +72,25 @@ const displaySubtitle = computed(() =>
         ]"
         @click="emit('open')"
       >
-        <SidebarRowLabel :title="titleForThread(thread)" :subtitle="displaySubtitle || undefined">
+        <SidebarRowLabel :title="titleForThread(thread)" :subtitle="hasSubtitle ? '' : undefined">
           <template #title-prefix>
             <StarIcon
               v-if="showPinnedIcon"
               class="size-3.5 shrink-0 fill-current text-accent-orange"
             />
+          </template>
+          <template v-if="hasSubtitle" #subtitle>
+            <span v-if="props.subtitle">{{ props.subtitle }}</span>
+            <span v-if="props.subtitle && props.threadBytes !== undefined"> · </span>
+            <span
+              v-if="props.threadBytes !== undefined"
+              class="inline-flex min-w-0 items-center gap-1"
+            >
+              <DatabaseIcon class="size-3 shrink-0" :class="threadSizeClass" aria-hidden="true" />
+              <span :class="threadSizeClass">{{ formattedThreadSize }}</span>
+            </span>
+            <span v-if="props.threadBytes !== undefined && props.resourceUsage"> · </span>
+            <span v-if="props.resourceUsage">{{ props.resourceUsage }}</span>
           </template>
           <template #trailing>
             <ThreadStatusIndicator :status="status" :completion-attention="completionAttention" />

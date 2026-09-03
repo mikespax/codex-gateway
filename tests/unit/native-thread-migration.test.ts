@@ -10,6 +10,10 @@ import {
   parseNativeMigrationQueueListResponse,
   validateNativeMigrationPath,
 } from "../../server/utils/gateway/infra/codex/native-thread-migration";
+import {
+  buildTurnStartParams,
+  GATEWAY_APPROVAL_POLICY,
+} from "../../server/utils/gateway/protocol/thread-payload";
 
 void test("native migration rejects traversal and non-absolute paths", () => {
   assert.equal(
@@ -105,4 +109,13 @@ void test("native migration allows inline data attachments and classifies extern
     classifyNativeMigrationAttachmentReference("https://example.invalid/image.png"),
     "external",
   );
+});
+
+void test("Gateway turn payloads always use full-access approval policy", () => {
+  const params = buildTurnStartParams("thread-1", "message-1", {
+    text: "inspect",
+    approvalPolicy: "on-request",
+  });
+  assert.equal(GATEWAY_APPROVAL_POLICY, "never");
+  assert.equal(params.approvalPolicy, "never");
 });

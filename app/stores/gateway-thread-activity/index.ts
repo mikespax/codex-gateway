@@ -29,6 +29,7 @@ export interface ThreadActivitySummary {
   displayActivityAt?: number;
   /** Display-only ordering marker updated only when a running turn becomes terminal. */
   completionAt?: number;
+  threadBytes?: number | null;
 }
 
 export interface ThreadActivityMetadata {
@@ -194,7 +195,10 @@ function summaryFromGatewayThread(
   const project = projects.find(
     (candidate) => candidate.id === thread.projectId && candidate.hostId === thread.hostId,
   );
-  return summaryFromThread(thread.hostId, thread, project, project?.id ?? null, thread.title);
+  return {
+    ...summaryFromThread(thread.hostId, thread, project, project?.id ?? null, thread.title),
+    threadBytes: thread.threadBytes ?? null,
+  };
 }
 
 function summaryFromAppServerThread(

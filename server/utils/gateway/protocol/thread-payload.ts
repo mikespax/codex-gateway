@@ -10,6 +10,9 @@ import { normalizeTokenUsage } from "~~/shared/token-usage";
 import { recordFromUnknown } from "~~/shared/utils/records";
 import type { TurnStartInput } from "../runtime/types";
 
+/** Gateway policy: every managed Codex thread runs with the user's full-access preference. */
+export const GATEWAY_APPROVAL_POLICY: ApprovalPolicy = "never";
+
 export function buildUserInput(input: { text: string; images?: TurnStartInput["images"] }) {
   const userInput: Array<Record<string, unknown>> = [];
   if (input.text.trim() !== "") {
@@ -47,7 +50,9 @@ export function buildTurnStartParams(
     effort: input.effort === "" || input.effort === undefined ? null : input.effort,
     serviceTier:
       input.serviceTier === "" || input.serviceTier === undefined ? null : input.serviceTier,
-    approvalPolicy: input.approvalPolicy ?? null,
+    // Keep this invariant at the protocol boundary so legacy browser state or a stale per-thread
+    // setting cannot re-enable approval prompts for a new turn.
+    approvalPolicy: GATEWAY_APPROVAL_POLICY,
     collaborationMode:
       input.collaborationMode !== null && input.collaborationMode !== undefined
         ? buildAppServerCollaborationMode(input.collaborationMode)
@@ -67,15 +72,13 @@ export function buildAppServerCollaborationMode(input: ThreadCollaborationMode) 
   };
 }
 
-function normalizeApprovalPolicy(value: unknown): ApprovalPolicy | null {
-  return value === "untrusted" || value === "on-request" || value === "never" ? value : null;
-}
-
 export function extractThreadSettings(source: unknown): ThreadSettingsState {
   const sourceRecord = recordFromUnknown(source);
   const threadSettings = recordFromUnknown(sourceRecord?.threadSettings);
   const currentProtocolSettings = threadSettingsFromAppServer(threadSettings);
-  if (currentProtocolSettings !== null) return currentProtocolSettings;
+  if (currentProtocolSettings !== null) {
+    return { ...currentProtocolSettings, approvalPolicy: GATEWAY_APPROVAL_POLICY };
+  }
   const model = threadSettings?.model ?? sourceRecord?.model;
   const effort = threadSettings?.effort ?? sourceRecord?.reasoningEffort;
   const serviceTier = threadSettings?.serviceTier ?? sourceRecord?.serviceTier;
@@ -83,9 +86,7 @@ export function extractThreadSettings(source: unknown): ThreadSettingsState {
     model: typeof model === "string" ? model : null,
     effort: typeof effort === "string" ? effort : null,
     serviceTier: typeof serviceTier === "string" ? serviceTier : null,
-    approvalPolicy: normalizeApprovalPolicy(
-      threadSettings?.approvalPolicy ?? sourceRecord?.approvalPolicy,
-    ),
+    approvalPolicy: GATEWAY_APPROVAL_POLICY,
   };
 }
 
@@ -94,7 +95,7 @@ export function latestThreadSettingsFromEvents(events: GatewayEvent[]): ThreadSe
     if (event.method !== "thread/settings/updated") continue;
     const params = recordFromUnknown(event.payload.params);
     const settings = threadSettingsFromAppServer(params?.threadSettings);
-    if (settings !== null) return settings;
+    if (settings !== null) return { ...settings, approvalPolicy: GATEWAY_APPROVAL_POLICY };
   }
   return null;
 }

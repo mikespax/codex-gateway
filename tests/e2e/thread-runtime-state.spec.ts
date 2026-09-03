@@ -76,8 +76,8 @@ test("a turn row arriving before runtime activation opens when running and close
     });
   }, threadId);
 
-  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
-  await expect(page.getByText("Live work should already be visible")).toBeVisible();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await expect(page.getByText("Live work should already be visible")).toHaveCount(0);
   await expect(page.getByTestId("intermediate-steps-working")).toBeVisible();
   await expect(page.getByTestId("intermediate-header-duration")).toBeVisible();
 
@@ -217,7 +217,7 @@ test("opening completed history does not show fake thinking", async ({ page }) =
   await expect(page.getByText("completed history").first()).toBeVisible();
   await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveAttribute(
     "data-state",
-    "open",
+    "closed",
   );
   await expect(page.getByTestId("stop-turn-button")).toBeVisible();
   const composerInput = page.getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/);
@@ -346,7 +346,10 @@ test("opening a cached thread applies terminal events before deriving composer s
 
   await expect(page.getByText("cached turn is done")).toBeVisible();
   await expect.poll(() => selectedThreadStatusInStore(page)).toBe("completed");
-  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成");
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Completed|已完成/,
+  );
 });
 
 test("opening a thread stores browser-local last open selection", async ({ page }) => {
@@ -588,7 +591,10 @@ test("live terminal event updates selected thread even when snapshot cursor is a
   });
 
   await expect(page.getByText("cursor race done")).toBeVisible();
-  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成");
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Completed|已完成/,
+  );
 });
 
 test("context compaction duration survives event replay timing", async ({ page }) => {
@@ -642,7 +648,7 @@ test("context compaction duration survives event replay timing", async ({ page }
   });
 
   const chatScrollArea = page.getByTestId("chat-scroll-area");
-  await expect(chatScrollArea.getByText("压缩上下文")).toBeVisible();
+  await expect(chatScrollArea.getByText(/Context compaction|压缩上下文/)).toBeVisible();
   await expect(chatScrollArea.getByText("4.25s")).toBeVisible();
   await expect(chatScrollArea.getByText("0.00s")).toBeHidden();
 });
@@ -685,8 +691,11 @@ test("turn completed keeps thread running while context compaction is active", a
   });
 
   await expect.poll(() => selectedThreadStatusInStore(page)).toBe("running");
-  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "停止生成");
-  await expect(page.getByText("压缩上下文")).toBeVisible();
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Stop generation|停止生成/,
+  );
+  await expect(page.getByText(/Context compaction|压缩上下文/)).toBeVisible();
 });
 
 test("restoring a cached thread uses app-server snapshot state for active context compaction", async ({
@@ -739,6 +748,9 @@ test("restoring a cached thread uses app-server snapshot state for active contex
     otherThreadName: "Other Thread",
   });
 
-  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "停止生成");
-  await expect(page.getByText("压缩上下文")).toBeVisible();
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /Stop generation|停止生成/,
+  );
+  await expect(page.getByText(/Context compaction|压缩上下文/)).toBeVisible();
 });

@@ -3,6 +3,8 @@ import ThreadRow from "./ThreadRow.vue";
 import { formatRelative, pinnedThreadId, pinnedThreadKey } from "../sidebar-utils";
 import type { HostRecord, PinnedThreadRecord } from "../sidebar-types";
 import type { ThreadRuntimeStatus } from "@/stores/gateway/types";
+import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity";
+import { pinnedKey } from "@/stores/gateway/thread-utils/identity";
 
 const props = defineProps<{
   threads: PinnedThreadRecord[];
@@ -27,6 +29,8 @@ const emit = defineEmits<{
   moveHost: [thread: PinnedThreadRecord];
 }>();
 
+const activity = useGatewayThreadActivityStore();
+
 function subtitleForPinnedThread(thread: PinnedThreadRecord) {
   const hostName = props.hosts.find((host) => host.id === thread.hostId)?.name;
   return hostName || formatRelative(thread.updatedAt);
@@ -37,6 +41,10 @@ function isSelectedPinnedThread(thread: PinnedThreadRecord) {
     pinnedThreadId(thread) === String(props.selectedThreadId) &&
     thread.hostId === props.selectedHostId
   );
+}
+
+function threadBytes(thread: PinnedThreadRecord) {
+  return activity.summariesByKey[pinnedKey(thread.hostId, String(thread.threadId))]?.threadBytes;
 }
 </script>
 
@@ -59,6 +67,7 @@ function isSelectedPinnedThread(thread: PinnedThreadRecord) {
         :status="runtimeStatus(thread)"
         :completion-attention="completionAttention(thread)"
         :subtitle="subtitleForPinnedThread(thread) || formatRelative(thread.updatedAt)"
+        :thread-bytes="threadBytes(thread)"
         :resource-usage="props.resourceUsageForHost?.(thread.hostId)"
         :pin-label="$t('app.unpinThread')"
         :move-label="props.moveLabel"

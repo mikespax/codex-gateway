@@ -296,7 +296,7 @@ test("recalls the latest request above active intermediate work", async ({ page 
   await expect(userMessage).toBeVisible();
   await expect(page.getByTestId("active-prompt-recall")).toHaveCount(0);
   await expect(intermediateToggle).toBeVisible();
-  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
   await expect(page.getByTestId("intermediate-steps-working")).toBeVisible();
   await expect(page.getByTestId("stop-turn-button")).toBeHidden();
   await expect(page.getByTestId("send-turn-button")).toBeVisible();
@@ -1162,7 +1162,7 @@ printf '%s\n' '# Mobile File Workspace' 'Rendered from the remote tree.' > ${she
 });
 
 async function openIntermediateSteps(page: Page) {
-  const toggle = page.getByRole("button", { name: /中间过程/ }).first();
+  const toggle = page.getByRole("button", { name: /Intermediate steps|中间过程/ }).first();
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("data-state")) !== "open") {
     await toggle.click();

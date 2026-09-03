@@ -73,10 +73,9 @@ export function useComposerController() {
         settings.selectedServiceTier.value === "default"
           ? undefined
           : settings.selectedServiceTier.value,
-      approvalPolicy:
-        settings.selectedApprovalMode.value === "custom"
-          ? undefined
-          : settings.selectedApprovalMode.value,
+      // The Gateway is intentionally full-access only. Keep the value explicit in every browser
+      // request so stale per-thread settings cannot make a turn wait for a hidden approval card.
+      approvalPolicy: "never" as const,
     };
   };
   const submit = useComposerTurnSubmit({

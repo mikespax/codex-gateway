@@ -8,6 +8,7 @@ import { ThreadGoalService } from "./thread-goals";
 import { ThreadSettingsService } from "./thread-settings";
 import { ThreadCatalogService } from "./thread-catalog";
 import { ThreadHistoryReader } from "./thread-history-reader";
+import { GATEWAY_APPROVAL_POLICY } from "../protocol/thread-payload";
 
 class ThreadBroker {
   private readonly registry = new ControllerRegistry();
@@ -43,7 +44,11 @@ class ThreadBroker {
     // Paginated history is the current App Server storage model that can hydrate indexed Turn
     // pages without replaying an entire rollout JSONL. Keep this policy at the protocol boundary so
     // every Gateway-created thread uses it and browser DTOs do not need to expose storage details.
-    const result = await client.request("thread/start", { ...params, historyMode: "paginated" });
+    const result = await client.request("thread/start", {
+      ...params,
+      historyMode: "paginated",
+      approvalPolicy: GATEWAY_APPROVAL_POLICY,
+    });
     const started = this.openService.startedThreadResult(host, projectId, result);
     await this.registry.retainStartedThreadSubscription(host, started.threadId);
     return started.result;

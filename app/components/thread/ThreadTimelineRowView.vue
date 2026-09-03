@@ -30,6 +30,7 @@ const emit = defineEmits<{
     :segment-count="props.row.segmentCount"
     :working="props.row.working"
     :started-at="props.row.startedAt"
+    :latest-operation="props.row.latestOperation"
     :footer="props.row.footer"
     @toggle="emit('intermediateToggle', props.row.turnId, $event)"
   />

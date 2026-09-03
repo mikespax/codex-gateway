@@ -7,6 +7,7 @@ interface IntermediateDisclosureTurn {
   status: unknown;
   items: ThreadTimelineItem[];
   turnIsActive: boolean;
+  hasPendingApproval: boolean;
 }
 
 export function useIntermediateStepsDisclosure(input: {
@@ -40,14 +41,20 @@ export function useIntermediateStepsDisclosure(input: {
       }
 
       for (const turn of input.turns.value) {
-        // A new active turn opens its intermediate work so the live trace and bottom-follow mode
-        // are visible without another click. Preserve an explicit open/closed choice while that
-        // turn continues streaming, including a reader deliberately collapsing noisy work.
+        // A rollout created before the Gateway full-access invariant may still have one
+        // in-flight approval request. Keep that exception visible so an old turn cannot appear
+        // frozen behind a collapsed Working row. New turns never create this state because every
+        // Gateway start/resume/settings request forces approvalPolicy=never.
+        if (turn.hasPendingApproval && !touchedByUser.has(turn.id)) {
+          openByTurnId.set(turn.id, true);
+          continue;
+        }
+        // Keep live intermediate work collapsed by default so routine commands and reasoning do
+        // not flood the conversation. The working header remains visible, and an explicit click
+        // can still open the trace for inspection. Preserve that user choice while the turn
+        // continues streaming, including a reader deliberately opening or closing noisy work.
         if (input.threadIsRunning.value && turn.turnIsActive) {
-          // The turn row can arrive one realtime flush before the runtime projection changes to
-          // running. That first pass initializes the disclosure closed below; it is not a user
-          // choice. Open again on the active transition unless the reader actually toggled it.
-          if (!touchedByUser.has(turn.id)) openByTurnId.set(turn.id, true);
+          if (!touchedByUser.has(turn.id)) openByTurnId.set(turn.id, false);
           continue;
         }
         if (input.autoCollapseIntermediate.value && !touchedByUser.has(turn.id)) {

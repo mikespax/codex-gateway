@@ -39,7 +39,7 @@ const props = defineProps<{
   error?: string;
 }>();
 
-type ThreadMoveMode = "handoff" | "native";
+type ThreadMoveMode = "native";
 
 const emit = defineEmits<{
   "update:open": [open: boolean];
@@ -53,7 +53,7 @@ const emit = defineEmits<{
   ];
 }>();
 
-const mode = ref<ThreadMoveMode>("handoff");
+const mode = ref<ThreadMoveMode>("native");
 const targetHostId = ref<number | null>(null);
 const targetProjectId = ref<number | null>(null);
 const targetProjectChoice = ref<"custom" | "preset" | string>("custom");
@@ -124,10 +124,6 @@ watch(
   },
 );
 
-watch(mode, () => {
-  if (props.open) void refreshReadiness();
-});
-
 watch(targetHostId, () => {
   operationsFallbackAppliedKey.value = null;
   targetCwdEdited.value = false;
@@ -167,13 +163,23 @@ function markTargetCwdEdited() {
 }
 
 function reset() {
-  mode.value = "handoff";
+  mode.value = "native";
   const firstHost = targetHosts.value[0];
   targetHostId.value = firstHost?.id ?? null;
   configureTarget(firstHost);
 }
 
 function configureTarget(host = targetHost.value) {
+  const presetPath = presetPathForHost(host, props.sourceCwd);
+  if (presetPath !== null) {
+    const presetProject = props.projects.find(
+      (project) => project.hostId === host?.id && project.remotePath === presetPath,
+    );
+    targetProjectId.value = presetProject?.id ?? null;
+    targetProjectChoice.value = presetProject === undefined ? "preset" : String(presetProject.id);
+    targetCwd.value = presetPath;
+    return;
+  }
   const firstProject = host
     ? props.projects.find((project) => project.hostId === host.id)
     : undefined;
@@ -185,7 +191,6 @@ function configureTarget(host = targetHost.value) {
   }
 
   targetProjectId.value = null;
-  const presetPath = presetPathForHost(host, props.sourceCwd);
   targetProjectChoice.value = presetPath === null ? "custom" : "preset";
   targetCwd.value = presetPath ?? props.sourceCwd ?? "";
 }
@@ -196,11 +201,26 @@ function presetPathForHost(host: HostRecord | undefined, sourceCwd: string | nul
     .trim()
     .toLocaleLowerCase()
     .replace(/[^a-z0-9]+/g, " ");
+  if (isOperationsWorkspace(sourceCwd)) {
+    if (name.includes("lenovo")) return "/root/stickerlight-ops";
+    if (name.includes("mac")) return "/Users/Sparks/stickerlight-ops";
+  }
   const workspaceName = sourceWorkspaceName(sourceCwd);
   if (name.includes("lenovo")) return `/root/workspaces/${workspaceName}`;
   if (name.includes("mac")) return `/Users/Sparks/workspaces/${workspaceName}`;
   if (name.includes("vps") || name.includes("contabo")) return "/root";
   return null;
+}
+
+function isOperationsWorkspace(sourceCwd: string | null) {
+  const normalized = sourceCwd?.trim().replace(/\/+$/, "") || "/";
+  return (
+    normalized === "/" ||
+    normalized === "/root" ||
+    normalized === "/tmp" ||
+    normalized === "/var/tmp" ||
+    normalized === "/root/stickerlight-ops"
+  );
 }
 
 function sourceWorkspaceName(sourceCwd: string | null) {
@@ -317,31 +337,9 @@ async function prepareWorkspace() {
         <DialogHeader>
           <DialogTitle>{{ $t("app.moveThreadTitle") }}</DialogTitle>
           <DialogDescription>
-            {{
-              $t(
-                mode === "native" ? "app.moveThreadNativeDescription" : "app.moveThreadDescription",
-                { title: sourceTitle },
-              )
-            }}
+            {{ $t("app.moveThreadNativeDescription", { title: sourceTitle }) }}
           </DialogDescription>
         </DialogHeader>
-
-        <div class="grid gap-2">
-          <Label for="move-thread-mode">{{ $t("app.moveThreadMode") }}</Label>
-          <Select
-            :model-value="mode"
-            :disabled="submitting || preparing"
-            @update:model-value="mode = $event === 'native' ? 'native' : 'handoff'"
-          >
-            <SelectTrigger id="move-thread-mode" data-testid="move-thread-mode" class="w-full">
-              <SelectValue :placeholder="$t('app.moveThreadMode')" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="handoff">{{ $t("app.moveThreadModeHandoff") }}</SelectItem>
-              <SelectItem value="native">{{ $t("app.moveThreadModeNative") }}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
         <div class="grid gap-2">
           <Label for="move-thread-host">{{ $t("app.moveThreadTargetHost") }}</Label>
@@ -415,11 +413,8 @@ async function prepareWorkspace() {
             :placeholder="$t('app.moveThreadTargetPathPlaceholder')"
             @update:model-value="markTargetCwdEdited"
           />
-          <p v-if="mode === 'native'" class="text-xs leading-5 text-warning">
+          <p class="text-xs leading-5 text-warning">
             {{ $t("app.moveThreadNativeWarning") }}
-          </p>
-          <p v-else class="text-xs leading-5 text-ink-muted">
-            {{ $t("app.moveThreadReconcileNotice") }}
           </p>
         </div>
 
@@ -478,7 +473,7 @@ async function prepareWorkspace() {
             {{ $t("app.cancel") }}
           </Button>
           <Button type="submit" data-testid="move-thread-submit" :disabled="!canSubmit">
-            {{ $t(mode === "native" ? "app.moveThreadNativeAction" : "app.moveThreadAction") }}
+            {{ $t("app.moveThreadNativeAction") }}
           </Button>
         </DialogFooter>
       </form>
