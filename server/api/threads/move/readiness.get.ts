@@ -8,6 +8,7 @@ import { requireRecord } from "../../../utils/gateway/http/validation/common";
 import { threadMoveReadinessSchema } from "../../../utils/gateway/http/validation/threads";
 import { hostStore } from "../../../utils/gateway/state/hosts";
 import { remoteWorkspaceReadiness } from "../../../utils/gateway/infra/host-services";
+import type { ResolvedSourceWorkspace } from "../../../utils/gateway/infra/git/remote-workspace-readiness";
 import { threadBroker } from "../../../utils/gateway/runtime/broker";
 
 export default defineGatewayEventHandler(async (event): Promise<ThreadMoveReadiness> => {
@@ -44,10 +45,15 @@ export default defineGatewayEventHandler(async (event): Promise<ThreadMoveReadin
     });
   }
   const targetCwd = input.targetCwd.trim();
-  const [source, target] = await Promise.all([
-    remoteWorkspaceReadiness.inspect(sourceHost, sourceCwd),
+  const [sourceWorkspace, target] = await Promise.all([
+    remoteWorkspaceReadiness.resolveSourceWorkspace(
+      sourceHost,
+      sourceCwd,
+      sourceOpen.project?.remotePath ?? null,
+    ),
     remoteWorkspaceReadiness.inspect(targetHost, targetCwd),
   ]);
+  const source = sourceWorkspace.readiness;
 
   let status: ThreadMoveReadiness["status"];
   if (source.availability === "missing") {
@@ -82,5 +88,21 @@ export default defineGatewayEventHandler(async (event): Promise<ThreadMoveReadin
     status,
     source: { hostId: sourceHost.id, threadId: input.sourceThreadId, cwd: sourceCwd },
     target: { hostId: targetHost.id, cwd: targetCwd },
+    ...sourceWorkspaceMetadata(sourceWorkspace, targetHost.name),
   };
 });
+
+function sourceWorkspaceMetadata(source: ResolvedSourceWorkspace, targetHostName: string) {
+  if (source.kind !== "operations_fallback") return {};
+  const normalizedTargetName = targetHostName.trim().toLowerCase();
+  return {
+    sourceWorkspaceKind: source.kind,
+    sourceWorkspaceCwd: source.cwd,
+    recommendedTargetCwd:
+      normalizedTargetName === "lenovo"
+        ? "/root/stickerlight-ops"
+        : normalizedTargetName === "mac"
+          ? "/Users/Sparks/stickerlight-ops"
+          : null,
+  };
+}

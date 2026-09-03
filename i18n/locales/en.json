@@ -255,6 +255,8 @@
     "moveThreadReadinessTargetNotGit": "The selected target working directory is not a Git repository.",
     "moveThreadReadinessRepositoryMismatch": "The source and target repositories do not match, or the repository identity could not be verified.",
     "moveThreadReadinessSourceCommitMissing": "The target repository does not contain the source thread’s current commit.",
+    "moveThreadReadinessOperationsFallback": "This VPS operations conversation is being checked from {source}; the recommended full-migration target is {target}.",
+    "moveThreadReadinessTargetHostPath": "the selected target host’s operations workspace",
     "moveThreadReadinessFailed": "Could not verify workspace readiness. Try again after checking the target host connection.",
     "moveThreadPrepareWorkspace": "Prepare compatible workspace",
     "moveThreadPrepareFailed": "Could not prepare the workspace. No existing target was overwritten.",

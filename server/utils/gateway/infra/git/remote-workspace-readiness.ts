@@ -8,6 +8,10 @@ import type { HostWithSecret } from "../ssh/ssh-types";
 const READINESS_TIMEOUT_MS = 30_000;
 const PREPARE_TIMEOUT_MS = 5 * 60_000;
 const MAX_READINESS_OUTPUT_BYTES = 16 * 1024;
+const VPS_HOST_NAME = "vps";
+const VPS_OPERATIONS_WORKSPACE = "/root/stickerlight-ops";
+
+export type SourceWorkspaceKind = "thread_cwd" | "project_cwd" | "operations_fallback";
 
 export type WorkspacePreparationFailure =
   | "source_workspace_missing"
@@ -52,6 +56,14 @@ export type RemoteWorkspaceReadiness =
 export interface PreparedWorkspace {
   source: RemoteWorkspaceReadiness;
   target: RemoteWorkspaceReadiness;
+  sourceWorkspaceKind: SourceWorkspaceKind;
+  sourceWorkspaceCwd: string;
+}
+
+export interface ResolvedSourceWorkspace {
+  readiness: RemoteWorkspaceReadiness;
+  kind: SourceWorkspaceKind;
+  cwd: string;
 }
 
 export class RemoteWorkspaceReadinessService {
@@ -88,14 +100,57 @@ export class RemoteWorkspaceReadinessService {
     throw new Error("Remote workspace path inspection returned an invalid result");
   }
 
+  async resolveSourceWorkspace(
+    host: HostWithSecret,
+    sourceCwd: string,
+    projectCwd?: string | null,
+  ): Promise<ResolvedSourceWorkspace> {
+    const normalizedSourceCwd = posix.normalize(sourceCwd.trim());
+    const source = await this.inspect(host, normalizedSourceCwd);
+    if (source.availability === "available") {
+      return { readiness: source, kind: "thread_cwd", cwd: normalizedSourceCwd };
+    }
+
+    const normalizedProjectCwd = projectCwd?.trim() ? posix.normalize(projectCwd.trim()) : null;
+    if (
+      normalizedProjectCwd !== null &&
+      normalizedProjectCwd !== normalizedSourceCwd &&
+      isAncestorPath(normalizedProjectCwd, normalizedSourceCwd)
+    ) {
+      const project = await this.inspect(host, normalizedProjectCwd);
+      if (project.availability === "available") {
+        return { readiness: project, kind: "project_cwd", cwd: normalizedProjectCwd };
+      }
+    }
+
+    if (normalizedSourceCwd === "/root" && host.name.trim().toLowerCase() === VPS_HOST_NAME) {
+      const fallback = await this.inspect(host, VPS_OPERATIONS_WORKSPACE);
+      if (fallback.availability === "available") {
+        return {
+          readiness: fallback,
+          kind: "operations_fallback",
+          cwd: VPS_OPERATIONS_WORKSPACE,
+        };
+      }
+    }
+
+    return { readiness: source, kind: "thread_cwd", cwd: normalizedSourceCwd };
+  }
+
   async prepare(
     sourceHost: HostWithSecret,
     sourceCwd: string,
+    sourceProjectCwd: string | null | undefined,
     targetHost: HostWithSecret,
     targetCwd: string,
   ): Promise<PreparedWorkspace> {
     const targetPath = posix.normalize(targetCwd.trim());
-    const source = await this.inspect(sourceHost, sourceCwd);
+    const resolvedSource = await this.resolveSourceWorkspace(
+      sourceHost,
+      sourceCwd,
+      sourceProjectCwd,
+    );
+    const source = resolvedSource.readiness;
     if (source.availability === "missing") {
       throw new WorkspacePreparationError(
         "source_workspace_missing",
@@ -133,7 +188,7 @@ export class RemoteWorkspaceReadinessService {
       );
     }
 
-    const originUrl = await this.readOriginUrl(sourceHost, sourceCwd);
+    const originUrl = await this.readOriginUrl(sourceHost, resolvedSource.cwd);
     const stagingPath = `${targetPath}.codex-gateway-staging-${randomUUID()}`;
     const result = await this.ssh.exec(
       targetHost,
@@ -171,7 +226,12 @@ export class RemoteWorkspaceReadinessService {
         "The prepared target workspace failed final Git verification",
       );
     }
-    return { source, target };
+    return {
+      source,
+      target,
+      sourceWorkspaceKind: resolvedSource.kind,
+      sourceWorkspaceCwd: resolvedSource.cwd,
+    };
   }
 
   private async readOriginUrl(host: HostWithSecret, path: string) {
@@ -387,4 +447,10 @@ function parseReadiness(output: string): RemoteWorkspaceReadiness {
     clean: rawClean === "1",
     originConfigured: rawOriginConfigured === "1",
   };
+}
+
+function isAncestorPath(parent: string, child: string) {
+  const normalizedParent = posix.normalize(parent);
+  const normalizedChild = posix.normalize(child);
+  return normalizedParent !== "/" && normalizedChild.startsWith(`${normalizedParent}/`);
 }

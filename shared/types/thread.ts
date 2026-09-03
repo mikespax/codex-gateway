@@ -94,6 +94,10 @@ export interface ThreadMoveReadiness {
     hostId: number;
     cwd: string;
   };
+  /** Present when the source was resolved through a dedicated VPS operations fallback. */
+  sourceWorkspaceKind?: "operations_fallback";
+  sourceWorkspaceCwd?: string;
+  recommendedTargetCwd?: string | null;
 }
 
 export interface ThreadTurnsPageResult {

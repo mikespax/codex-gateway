@@ -54,6 +54,8 @@ const readiness = ref<ThreadMoveReadiness | null>(null);
 const readinessLoading = ref(false);
 const readinessError = ref("");
 const preparing = ref(false);
+const operationsFallbackAppliedKey = ref<string | null>(null);
+const targetCwdEdited = ref(false);
 let readinessRequestId = 0;
 const targetHosts = computed(() => props.hosts.filter((host) => host.id !== props.sourceHostId));
 const targetHost = computed(() => props.hosts.find((host) => host.id === targetHostId.value));
@@ -91,6 +93,14 @@ const { t } = useI18n();
 const readinessMessage = computed(() =>
   readiness.value === null ? "" : t(readinessMessageKey[readiness.value.status]),
 );
+const operationsFallbackMessage = computed(() => {
+  const fallback = readiness.value;
+  if (fallback?.sourceWorkspaceKind !== "operations_fallback") return "";
+  return t("app.moveThreadReadinessOperationsFallback", {
+    source: fallback.sourceWorkspaceCwd,
+    target: fallback.recommendedTargetCwd ?? t("app.moveThreadReadinessTargetHostPath"),
+  });
+});
 
 watch(
   () => props.open,
@@ -101,6 +111,8 @@ watch(
 );
 
 watch(targetHostId, () => {
+  operationsFallbackAppliedKey.value = null;
+  targetCwdEdited.value = false;
   configureTarget();
 });
 
@@ -109,6 +121,7 @@ watch([targetHostId, targetProjectId, targetCwd, () => props.sourceThreadId], ()
 });
 
 function selectProject(value: unknown) {
+  targetCwdEdited.value = true;
   if (typeof value !== "string" || value === "custom") {
     targetProjectId.value = null;
     targetProjectChoice.value = "custom";
@@ -129,6 +142,10 @@ function selectProject(value: unknown) {
   targetProjectChoice.value = value;
   const project = targetProjects.value.find((candidate) => candidate.id === projectId);
   if (project !== undefined) targetCwd.value = project.remotePath;
+}
+
+function markTargetCwdEdited() {
+  targetCwdEdited.value = true;
 }
 
 function reset() {
@@ -216,7 +233,10 @@ async function refreshReadiness() {
     const result = await gatewayApi<ThreadMoveReadiness>(
       `/api/threads/move/readiness?${params.toString()}`,
     );
-    if (requestId === readinessRequestId) readiness.value = result;
+    if (requestId === readinessRequestId) {
+      readiness.value = result;
+      applyOperationsFallbackTarget(result, hostId);
+    }
   } catch (error: unknown) {
     if (requestId === readinessRequestId) {
       readinessError.value = messageFromError(error, t("app.moveThreadReadinessFailed"));
@@ -224,6 +244,25 @@ async function refreshReadiness() {
   } finally {
     if (requestId === readinessRequestId) readinessLoading.value = false;
   }
+}
+
+function applyOperationsFallbackTarget(result: ThreadMoveReadiness, hostId: number) {
+  const recommended = result.recommendedTargetCwd?.trim();
+  if (
+    result.sourceWorkspaceKind !== "operations_fallback" ||
+    recommended === undefined ||
+    recommended === "" ||
+    targetCwdEdited.value ||
+    targetCwd.value.trim() === recommended
+  ) {
+    return;
+  }
+  const applicationKey = `${hostId}:${recommended}`;
+  if (operationsFallbackAppliedKey.value === applicationKey) return;
+  operationsFallbackAppliedKey.value = applicationKey;
+  targetProjectId.value = null;
+  targetProjectChoice.value = "preset";
+  targetCwd.value = recommended;
 }
 
 async function prepareWorkspace() {
@@ -332,6 +371,7 @@ async function prepareWorkspace() {
             data-testid="move-thread-cwd"
             :disabled="submitting || preparing"
             :placeholder="$t('app.moveThreadTargetPathPlaceholder')"
+            @update:model-value="markTargetCwdEdited"
           />
           <p class="text-xs leading-5 text-ink-muted">{{ $t("app.moveThreadReconcileNotice") }}</p>
         </div>
@@ -350,6 +390,13 @@ async function prepareWorkspace() {
             v-else-if="readiness !== null"
             :class="readiness.status === 'ready' ? 'text-success' : 'text-destructive'"
           >
+            <span
+              v-if="operationsFallbackMessage"
+              class="mb-2 block text-ink-muted"
+              data-testid="move-thread-operations-fallback"
+            >
+              {{ operationsFallbackMessage }}
+            </span>
             {{ readinessMessage }}
           </p>
           <p v-else class="text-ink-muted">

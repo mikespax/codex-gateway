@@ -9,6 +9,7 @@ import { threadMovePrepareWorkspaceSchema } from "../../../utils/gateway/http/va
 import { requireRecord } from "../../../utils/gateway/http/validation/common";
 import { hostStore } from "../../../utils/gateway/state/hosts";
 import { remoteWorkspaceReadiness } from "../../../utils/gateway/infra/host-services";
+import type { ResolvedSourceWorkspace } from "../../../utils/gateway/infra/git/remote-workspace-readiness";
 import { WorkspacePreparationError } from "../../../utils/gateway/infra/git/remote-workspace-readiness";
 import { threadBroker } from "../../../utils/gateway/runtime/broker";
 
@@ -48,11 +49,25 @@ export default defineGatewayEventHandler(async (event): Promise<ThreadMoveReadin
 
   try {
     const targetCwd = posix.normalize(input.targetCwd.trim());
-    await remoteWorkspaceReadiness.prepare(sourceHost, sourceCwd, targetHost, targetCwd);
+    const prepared = await remoteWorkspaceReadiness.prepare(
+      sourceHost,
+      sourceCwd,
+      sourceOpen.project?.remotePath ?? null,
+      targetHost,
+      targetCwd,
+    );
     return {
       status: "ready",
       source: { hostId: sourceHost.id, threadId: input.sourceThreadId, cwd: sourceCwd },
       target: { hostId: targetHost.id, cwd: targetCwd },
+      ...sourceWorkspaceMetadata(
+        {
+          kind: prepared.sourceWorkspaceKind,
+          cwd: prepared.sourceWorkspaceCwd,
+          readiness: prepared.source,
+        },
+        targetHost.name,
+      ),
     };
   } catch (error) {
     if (error instanceof WorkspacePreparationError) {
@@ -62,3 +77,18 @@ export default defineGatewayEventHandler(async (event): Promise<ThreadMoveReadin
     throw error;
   }
 });
+
+function sourceWorkspaceMetadata(source: ResolvedSourceWorkspace, targetHostName: string) {
+  if (source.kind !== "operations_fallback") return {};
+  const normalizedTargetName = targetHostName.trim().toLowerCase();
+  return {
+    sourceWorkspaceKind: source.kind,
+    sourceWorkspaceCwd: source.cwd,
+    recommendedTargetCwd:
+      normalizedTargetName === "lenovo"
+        ? "/root/stickerlight-ops"
+        : normalizedTargetName === "mac"
+          ? "/Users/Sparks/stickerlight-ops"
+          : null,
+  };
+}
