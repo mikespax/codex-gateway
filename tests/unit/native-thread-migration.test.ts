@@ -5,6 +5,7 @@ import {
   classifyNativeMigrationAttachmentReference,
   NativeThreadMigrationError,
   nativeMigrationQueueMatches,
+  nativeMigrationTargetRolloutPath,
   parseNativeMigrationQueueAddResponse,
   parseNativeMigrationQueueListResponse,
   validateNativeMigrationPath,
@@ -44,6 +45,25 @@ void test("native migration detects recursive descendant thread edges", () => {
       "root",
     ),
     false,
+  );
+});
+
+void test("native migration maps rollout paths across different Codex homes", () => {
+  assert.equal(
+    nativeMigrationTargetRolloutPath(
+      "/root/.codex/sessions/2026/09/03/thread.jsonl",
+      "/root/.codex",
+      "/Users/Sparks/.codex",
+    ),
+    "/Users/Sparks/.codex/sessions/2026/09/03/thread.jsonl",
+  );
+  assert.equal(
+    nativeMigrationTargetRolloutPath(
+      "/root/.codex/archived_sessions/2026/08/31/thread.jsonl",
+      "/root/.codex",
+      "/Users/Sparks/.codex",
+    ),
+    "/Users/Sparks/.codex/archived_sessions/2026/08/31/thread.jsonl",
   );
 });
 

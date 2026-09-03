@@ -193,16 +193,12 @@ export class NativeThreadMigrationService {
 
     // Query both homes through the remote login shell. Never infer the target home from the
     // source path because the SSH accounts can have different homes or CODEX_HOME overrides.
+    // Native migration preserves the relative Codex layout, so the absolute homes may differ
+    // between hosts (for example, VPS /root/.codex and macOS /Users/Sparks/.codex).
     const [sourceHome, targetHome] = await Promise.all([
       this.readCodexHome(sourceHost),
       this.readCodexHome(targetHost),
     ]);
-    if (sourceHome.codexHome !== targetHome.codexHome) {
-      throw new NativeThreadMigrationError(
-        "nativeMigrationCodexHomeMismatch",
-        "Source and target CODEX_HOME must match for exact native migration",
-      );
-    }
     const targetDirectory = await this.dependencies.remoteFiles.inspectProjectDirectories(
       targetHost,
       [targetCwd],
@@ -373,8 +369,11 @@ export class NativeThreadMigrationService {
       const transferredAttachments = new Set<string>();
       const targetThreads: MigrationThread[] = [];
       for (const sourceThread of sourceThreads) {
-        const sourceRelativePath = relativeRolloutPath(sourceThread.path, sourceHome.codexHome);
-        const targetPath = posix.join(targetHome.codexHome, sourceRelativePath);
+        const targetPath = nativeMigrationTargetRolloutPath(
+          sourceThread.path,
+          sourceHome.codexHome,
+          targetHome.codexHome,
+        );
         const sourceFile = await this.dependencies.remoteFiles.openRemoteFile(
           sourceHost,
           sourceThread.path,
@@ -807,6 +806,16 @@ function relativeRolloutPath(sourcePath: string, codexHome: string) {
     "nativeMigrationSourcePathOutsideSessions",
     "Source rollout must be inside the remote Codex sessions or archived_sessions directory",
   );
+}
+
+export function nativeMigrationTargetRolloutPath(
+  sourcePath: string,
+  sourceCodexHome: string,
+  targetCodexHome: string,
+) {
+  const sourceHome = validateNativeMigrationPath(sourceCodexHome, "Source CODEX_HOME");
+  const targetHome = validateNativeMigrationPath(targetCodexHome, "Target CODEX_HOME");
+  return posix.join(targetHome, relativeRolloutPath(sourcePath, sourceHome));
 }
 
 async function ensureRemoteDirectory(
