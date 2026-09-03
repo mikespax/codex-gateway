@@ -111,7 +111,9 @@ export class RemoteWorkspaceReadinessService {
       return { readiness: source, kind: "thread_cwd", cwd: normalizedSourceCwd };
     }
 
-    const normalizedProjectCwd = projectCwd?.trim() ? posix.normalize(projectCwd.trim()) : null;
+    const trimmedProjectCwd = projectCwd?.trim() ?? "";
+    const normalizedProjectCwd =
+      trimmedProjectCwd === "" ? null : posix.normalize(trimmedProjectCwd);
     if (
       normalizedProjectCwd !== null &&
       normalizedProjectCwd !== normalizedSourceCwd &&
