@@ -36,8 +36,10 @@ const migrationResultSchema = z
       historyParity: z.literal(true),
       descendantsVerified: z.literal(true),
       goalsVerified: z.literal(true),
+      goalAccountingPreserved: z.boolean(),
       queuesVerified: z.literal(true),
     }),
+    warnings: z.array(z.string()),
   })
   .loose();
 
