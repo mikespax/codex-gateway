@@ -64,6 +64,7 @@ function subtitle(thread: RecentThread) {
         :status="thread.status"
         :completion-attention="thread.completionAttention"
         :subtitle="subtitle(thread)"
+        :thread-bytes="thread.threadBytes"
         :resource-usage="props.resourceUsageForHost?.(thread.hostId)"
         :pin-label="thread.pinned ? $t('app.unpinThread') : $t('app.pinThread')"
         :show-pinned-icon="thread.pinned"

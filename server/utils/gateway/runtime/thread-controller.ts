@@ -11,6 +11,7 @@ import { threadSnapshotStore } from "../state/thread-snapshots";
 import { threadRuntimeEvents } from "./thread-runtime-events";
 import type { ThreadOpenSnapshot } from "./types";
 import { createThreadNotificationResolvers } from "./notification-rpc-resolvers";
+import { GATEWAY_APPROVAL_POLICY } from "../protocol/thread-payload";
 
 export class ThreadController {
   readonly client: CodexRpcClient;
@@ -20,6 +21,7 @@ export class ThreadController {
   private closed = false;
   private activeMainThread = false;
   private subAgentThread = false;
+  private fullAccessApplied = false;
 
   constructor(
     readonly host: HostRecord,
@@ -229,11 +231,37 @@ export class ThreadController {
       parseThreadResumeResult,
     );
     this.subscribed = true;
+    if (resumed.approvalPolicy === GATEWAY_APPROVAL_POLICY) {
+      this.fullAccessApplied = true;
+    } else {
+      await this.ensureFullAccess();
+    }
     // Do not synthesize thread/settings/updated from thread/resume. The resume DTO only contains
     // model/effort, while the official settings notification also contains collaborationMode. A
     // partial event under the official method name can therefore overwrite an already observed
     // Plan mode. The open snapshot carries resume settings directly and real settings events remain
     // the sole source for the complete app-server state.
     return resumed;
+  }
+
+  private async ensureFullAccess() {
+    if (this.fullAccessApplied) return;
+    try {
+      // Resume can restore a rollout created with an older approval policy. Apply the Gateway
+      // invariant once per controller generation so subsequent turns cannot stop on a hidden
+      // approval request. A failure is advisory because turn/start also carries the same policy.
+      await this.client.request(
+        "thread/settings/update",
+        { threadId: this.threadId, approvalPolicy: GATEWAY_APPROVAL_POLICY },
+        15_000,
+      );
+      this.fullAccessApplied = true;
+    } catch (error) {
+      runtimeLog("full-access thread setting could not be applied", {
+        hostId: this.host.id,
+        threadId: this.threadId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }

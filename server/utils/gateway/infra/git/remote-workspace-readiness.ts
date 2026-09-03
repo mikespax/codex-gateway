@@ -10,6 +10,16 @@ const PREPARE_TIMEOUT_MS = 5 * 60_000;
 const MAX_READINESS_OUTPUT_BYTES = 16 * 1024;
 const VPS_HOST_NAME = "vps";
 const VPS_OPERATIONS_WORKSPACE = "/root/stickerlight-ops";
+const VPS_GENERIC_WORKSPACE_PATHS = new Set([
+  "/",
+  "/root",
+  "/root/.aws",
+  "/root/.cache",
+  "/root/.codex",
+  "/root/.config",
+  "/tmp",
+  "/var/tmp",
+]);
 
 export type SourceWorkspaceKind = "thread_cwd" | "project_cwd" | "operations_fallback";
 
@@ -125,7 +135,10 @@ export class RemoteWorkspaceReadinessService {
       }
     }
 
-    if (normalizedSourceCwd === "/root" && host.name.trim().toLowerCase() === VPS_HOST_NAME) {
+    if (
+      VPS_GENERIC_WORKSPACE_PATHS.has(normalizedSourceCwd) &&
+      host.name.trim().toLowerCase() === VPS_HOST_NAME
+    ) {
       const fallback = await this.inspect(host, VPS_OPERATIONS_WORKSPACE);
       if (fallback.availability === "available") {
         return {

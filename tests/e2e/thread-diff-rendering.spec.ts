@@ -89,6 +89,7 @@ test("active routine commands and empty reasoning collapse into one working row"
   await seedGatewayThread(page, {
     threadId,
     currentThread: { id: threadId, name: "Compact Live Work" },
+    status: "running",
     history: {
       thread: {
         id: threadId,
@@ -140,6 +141,13 @@ test("active routine commands and empty reasoning collapse into one working row"
     },
   });
 
+  const compactToggle = page.getByRole("button", { name: /Intermediate steps|中间过程/ });
+  // A stale approval from a rollout created before the full-access invariant is the one safety
+  // exception: keep it visible so an old turn cannot freeze behind a collapsed Working row.
+  await expect(compactToggle).toHaveAttribute("data-state", "open");
+  await expect(page.getByTestId("intermediate-latest-operation-header")).toContainText(
+    "deploy production",
+  );
   await openIntermediateSteps(page);
   await expect(page.getByText("I am checking the relevant files now.")).toBeVisible();
   await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
@@ -213,6 +221,10 @@ test("completed routine commands stay hidden while narrative and file summaries 
     },
   });
 
+  await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveAttribute(
+    "data-state",
+    "closed",
+  );
   await openIntermediateSteps(page);
   await expect(
     page.getByText("I checked the relevant files and completed the requested update."),
@@ -232,6 +244,7 @@ test("multiple steers remain visible between their own intermediate sections", a
   await seedGatewayThread(page, {
     threadId,
     currentThread: { id: threadId, name: "Steered sections" },
+    status: "running",
     history: {
       thread: {
         id: threadId,
@@ -384,6 +397,7 @@ test("switching threads keeps hidden diff details out of the intermediate summar
   await page.getByTestId(`thread-button-${shortThreadId}`).click();
   await expect(page.getByText("short thread content")).toBeVisible();
   await page.getByTestId(`thread-button-${diffThreadId}`).click();
+  await openIntermediateSteps(page);
   await expect(page.getByTestId("file-change-summary")).toBeVisible();
   await expect(page.getByRole("button", { name: /src\/async\.py/ })).toHaveCount(0);
   await expect(page.getByText("async_diff_line_120")).toHaveCount(0);
@@ -410,7 +424,7 @@ function cachedThreadView(threadId: string, history: ThreadHistoryState): Thread
 }
 
 async function openIntermediateSteps(page: import("@playwright/test").Page) {
-  const toggle = page.getByRole("button", { name: /中间过程/ }).first();
+  const toggle = page.getByRole("button", { name: /Intermediate steps|中间过程/ }).first();
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("data-state")) !== "open") {
     await toggle.click();

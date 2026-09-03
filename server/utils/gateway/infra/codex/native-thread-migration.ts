@@ -612,6 +612,12 @@ export class NativeThreadMigrationService {
       }
       await verifyTargetHistory(targetClient, sourceThreads.slice(1), targetThreads);
 
+      if (!goalAccountingPreserved) {
+        warnings.add(
+          "Codex goal usage counters could not be restored exactly and started at zero on the target.",
+        );
+      }
+
       const rootSource = sourceThreads[0];
       const rootTarget = targetThreads[0];
       if (rootSource === undefined || rootTarget?.targetPath === undefined) {
@@ -1439,7 +1445,7 @@ async function inspectRollout(path: string, expectedId: string): Promise<Rollout
 }
 
 function normalizeNativeAttachmentReference(reference: string) {
-  let normalized = reference.trim().replace(/[|,;.)\]}]+$/g, "");
+  let normalized = reference.trim().replace(/[|,;.)\]}:]+$/g, "");
   normalized = normalized.replace(/:\d+(?::\d+)?$/g, "");
   return normalized;
 }

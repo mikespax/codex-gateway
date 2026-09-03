@@ -93,6 +93,7 @@ export function buildThreadTimelineRows(input: {
         isLatestSegment,
       );
       const working = sections.turnIsActive && isLatestSegment;
+      const latestOperation = working ? latestIntermediateOperation(segment.items) : null;
       rows.push({
         key: `${input.threadId}:turn-${turn.id}:intermediate-header-${segmentIndex}`,
         type: "intermediateHeader",
@@ -104,6 +105,7 @@ export function buildThreadTimelineRows(input: {
         segmentCount: intermediateSegments.length,
         working,
         startedAt: working ? timing.startedAt : undefined,
+        latestOperation,
       });
       if (intermediateOpen) {
         appendItemRows(
@@ -384,6 +386,7 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.segmentCount === right.segmentCount &&
       left.working === right.working &&
       left.startedAt === right.startedAt &&
+      left.latestOperation === right.latestOperation &&
       left.footer === right.footer &&
       left.turnId === right.turnId
     );

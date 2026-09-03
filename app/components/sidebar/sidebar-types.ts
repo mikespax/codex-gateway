@@ -8,6 +8,7 @@ export interface SidebarThread extends Record<string, unknown> {
   id: string | number;
   updatedAt?: number | null;
   pinned?: boolean;
+  threadBytes?: number | null;
 }
 
 export type SidebarThreadRow = SidebarThread | PinnedThreadRecord;

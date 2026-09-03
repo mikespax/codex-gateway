@@ -11,7 +11,7 @@ import { hostStore } from "../../utils/gateway/state/hosts";
 import { projectStore } from "../../utils/gateway/state/projects";
 import { threadMetadataStore } from "../../utils/gateway/state/thread-metadata";
 import { threadSnapshotStore } from "../../utils/gateway/state/thread-snapshots";
-import { remoteFiles } from "../../utils/gateway/infra/host-services";
+import { remoteFiles, threadStorage } from "../../utils/gateway/infra/host-services";
 import { withAllThreadSources } from "../../utils/gateway/protocol/thread-list";
 import { threadProjectDiscovery } from "../../utils/gateway/runtime/thread-project-discovery";
 import type { AppServerThread, GatewayThread, ProjectRecord } from "~~/shared/types";
@@ -67,10 +67,21 @@ export default defineGatewayEventHandler(async (event) => {
     projects,
     query.searchTerm ?? null,
   );
+  let threadsWithStorage = gatewayThreads;
+  try {
+    const sizes = await threadStorage.scan(host, gatewayThreads);
+    threadsWithStorage = gatewayThreads.map((thread) => ({
+      ...thread,
+      threadBytes: sizes.get(thread.id) ?? null,
+    }));
+  } catch {
+    // Storage is advisory. A missing rollout, unsupported remote utility, or SSH outage must not
+    // hide otherwise authoritative threads from the list.
+  }
   const projectDirectoryAvailability = await inspectProjectAvailability(host, projects);
   return {
     ...page,
-    data: gatewayThreads,
+    data: threadsWithStorage,
     projects,
     projectDirectoryAvailability,
   };

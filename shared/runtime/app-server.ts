@@ -276,6 +276,7 @@ export const gatewayThreadSchema = appServerThreadSchema.omit({ projectId: true 
   projectId: z.number().int().positive().nullable(),
   pinned: z.boolean(),
   title: z.string().nullable(),
+  threadBytes: z.number().nonnegative().nullable().optional(),
 });
 
 export function parseAppServerThread(value: unknown): AppServerThread {

@@ -70,7 +70,7 @@ export function useSidebarHostMetrics(hosts: Ref<HostRecord[]>) {
   function usageForHost(hostId: number) {
     const summary = usageByHost.value[hostId];
     if (summary === undefined) return null;
-    return `CPU ${formatPercent(summary.cpuPercent)} · RAM ${formatPercent(summary.memoryPercent)}`;
+    return `CPU ${formatPercent(summary.cpuPercent)} · RAM ${formatPercent(summary.memoryPercent)} · HDD ${formatPercent(summary.diskPercent)}`;
   }
 
   onMounted(() => {
@@ -102,7 +102,7 @@ export function useSidebarHostMetrics(hosts: Ref<HostRecord[]>) {
   return { usageByHost, usageForHost, refresh };
 }
 
-function formatPercent(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return "—";
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   return `${Math.round(value)}%`;
 }

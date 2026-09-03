@@ -12,6 +12,7 @@ const props = defineProps<{
   segmentCount?: number;
   working?: boolean;
   startedAt?: number | null;
+  latestOperation?: string | null;
   footer?: boolean;
 }>();
 
@@ -58,7 +59,15 @@ const { t } = useI18n();
           {{ t("app.working") }}
         </span>
         <span
-          v-else-if="props.preview"
+          v-if="props.working && props.latestOperation"
+          data-testid="intermediate-latest-operation-header"
+          class="block truncate text-xs leading-4 text-ink-faint"
+          :title="props.latestOperation"
+        >
+          {{ props.latestOperation }}
+        </span>
+        <span
+          v-else-if="!props.working && props.preview"
           data-testid="intermediate-steps-preview"
           class="mt-0.5 line-clamp-2 text-xs leading-4 text-ink-faint md:line-clamp-1"
         >

@@ -307,6 +307,8 @@ export type GatewayThread = Omit<AppServerThread, "projectId"> & {
   projectId: number | null;
   pinned: boolean;
   title: string | null;
+  /** Best-effort bytes for this thread's persisted Codex state on its host. */
+  threadBytes?: number | null;
 };
 
 export interface ThreadTokenUsageState {

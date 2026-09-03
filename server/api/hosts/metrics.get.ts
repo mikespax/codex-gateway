@@ -2,6 +2,7 @@ import { defineGatewayEventHandler } from "../../utils/gateway/http/errors";
 import { hostMetricsManager } from "../../utils/gateway/infra/host-services";
 import { hostStore } from "../../utils/gateway/state/hosts";
 import type { HostResourceUsageSummary } from "~~/shared/types";
+import { rootFilesystemUsagePercent } from "../../utils/gateway/host-metrics/sidebar-summary";
 
 export default defineGatewayEventHandler((event): HostResourceUsageSummary[] => {
   const userId = event.context.auth!.user.id;
@@ -18,6 +19,7 @@ export default defineGatewayEventHandler((event): HostResourceUsageSummary[] => 
       status: snapshot.status,
       cpuPercent: latest?.cpu.usagePercent ?? null,
       memoryPercent: latest?.memory.usagePercent ?? null,
+      diskPercent: rootFilesystemUsagePercent(latest?.disk.filesystems ?? []),
       sampledAt: latest?.sampledAt ?? null,
     };
   });

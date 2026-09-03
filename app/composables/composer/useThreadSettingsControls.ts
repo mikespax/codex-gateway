@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 
 import { storeToRefs } from "pinia";
-import type { ApprovalPolicy, ReasoningEffort } from "~~/shared/types";
+import type { ReasoningEffort } from "~~/shared/types";
 import { firstNonEmptyString, trimmedOrFallback, trimmedOrNull } from "~~/shared/utils/strings";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
@@ -17,7 +17,6 @@ export function useThreadSettingsControls() {
   const newThreadModel = ref("");
   const newThreadEffort = ref<ReasoningEffort>("default");
   const newThreadServiceTier = ref("default");
-  const newThreadApprovalMode = ref<ApprovalPolicy | "custom">("never");
 
   // Existing-thread controls are computed proxies over the per-thread Pinia state. Do not mirror
   // them into local refs with bidirectional watchers: thread selection, snapshot hydration, and the
@@ -70,22 +69,6 @@ export function useThreadSettingsControls() {
       });
     },
   });
-  const selectedApprovalMode = computed<ApprovalPolicy | "custom">({
-    get: () =>
-      selectedThreadId.value === null
-        ? newThreadApprovalMode.value
-        : (selectedThreadSettings.value.approvalPolicy ?? "custom"),
-    set: (approvalPolicy) => {
-      if (selectedThreadId.value === null) {
-        newThreadApprovalMode.value = approvalPolicy;
-        return;
-      }
-      void composer.saveSelectedThreadSettings({
-        approvalPolicy: approvalPolicy === "custom" ? null : approvalPolicy,
-      });
-    },
-  });
-
   const activeModel = computed(() => {
     if (selectedThreadId.value !== null) return selectedModel.value;
     return (
@@ -229,7 +212,6 @@ export function useThreadSettingsControls() {
     selectedModel,
     selectedEffort,
     selectedServiceTier,
-    selectedApprovalMode,
     activeModel,
     collaborationModel,
     activeModelLabel,

@@ -77,6 +77,7 @@ const disclosureTurns = computed(() =>
     status: turn.status,
     items: sections.items,
     turnIsActive: sections.turnIsActive,
+    hasPendingApproval: sections.items.some((item) => item.pendingApproval != null),
   })),
 );
 const { isIntermediateOpen, setIntermediateOpen } = useIntermediateStepsDisclosure({
@@ -93,11 +94,12 @@ const rows = computed<ThreadTimelineRow[]>((previous) => {
     sections,
     intermediateOpen: isIntermediateOpen(turn.id),
   }));
-  // The disclosure controller already owns the Agent-loop lifecycle: active work stays open and
-  // the whole intermediate process collapses only after the thread settles. Footer actions must
-  // consume that result instead of treating one turn/completed event as the end of a Goal or an
-  // automatic continuation. Requiring every disclosure to be closed also keeps the actions hidden
-  // while a reader has explicitly reopened historical intermediate work.
+  // The disclosure controller owns the Agent-loop lifecycle: active work stays collapsed by
+  // default behind its working header, while an explicit reader choice is preserved. The whole
+  // intermediate process collapses after the thread settles unless it was deliberately reopened.
+  // Footer actions consume that result instead of treating one turn/completed event as the end of
+  // a Goal or an automatic continuation. Requiring every disclosure to be closed also keeps the
+  // actions hidden while a reader has explicitly reopened historical intermediate work.
   const agentActionsAvailable =
     !threadIsRunning.value && timelineTurns.every((turn) => !turn.intermediateOpen);
   const next = buildThreadTimelineRows({

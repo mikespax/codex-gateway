@@ -116,6 +116,7 @@ const controller = requireHostTreeController();
                 controller.threadCompletionAttention(project.hostId, String(thread.id))
               "
               :subtitle="formatRelative(thread.updatedAt)"
+              :thread-bytes="thread.threadBytes"
               :resource-usage="controller.hostResourceUsage(project.hostId)"
               :pin-label="thread.pinned ? $t('app.unpinThread') : $t('app.pinThread')"
               :long-press-handlers="controller.longPressHandlers"
