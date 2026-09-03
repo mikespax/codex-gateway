@@ -140,20 +140,20 @@ export async function addRemoteHost(
   remote: RemoteCodexEnv,
   name = `docker-codex-${Date.now()}`,
 ) {
-  await openSettingsTab(page, "主机");
+  await openSettingsTab(page, /Hosts|主机/);
   const hostForm = page
     .getByTestId("add-host-button")
     .locator("xpath=ancestor::div[.//*[@data-testid='host-name-input']][1]");
   await hostForm.getByTestId("host-name-input").fill(name);
   await hostForm.getByTestId("host-ssh-input").fill(remote.host);
-  await hostForm.getByPlaceholder("用户").fill(remote.username);
-  await hostForm.getByPlaceholder("端口").fill(remote.port);
+  await hostForm.getByPlaceholder(/User|用户/).fill(remote.username);
+  await hostForm.getByPlaceholder(/Port|端口/).fill(remote.port);
   if (remote.proxyUrl !== undefined) {
     await hostForm.getByTestId("host-proxy-url-input").fill(remote.proxyUrl ?? "");
   }
   await hostForm.getByTestId("host-auth-select").click();
   await page.getByTestId("host-auth-password-option").click();
-  await hostForm.getByPlaceholder("SSH 密码").fill(remote.password);
+  await hostForm.getByPlaceholder(/SSH password|SSH 密码/).fill(remote.password);
 
   const hostResponsePromise = page.waitForResponse(
     (response) => response.url().endsWith("/api/hosts") && response.request().method() === "POST",
@@ -207,9 +207,9 @@ export async function startRemoteThreadFromProjectMenu(
   projectId: number,
 ) {
   await page.getByTestId(`project-button-${projectId}`).click({ button: "right" });
-  await page.getByRole("menuitem", { name: /新建/ }).click();
+  await page.getByRole("menuitem", { name: /New|新建/ }).click();
   const threadId = await waitForSelectedThreadId(page);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toBeEnabled();
+  await expect(page.getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)).toBeEnabled();
   await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible({ timeout: 30_000 });
   if (remote.testModel !== undefined && remote.testModel !== "") {
     await page.evaluate(async (model) => {
@@ -243,7 +243,9 @@ export async function sendTextTurn(
       .poll(async () => (await currentRouteSelection(page)).threadId, { timeout: 10_000 })
       .toBe(context.threadId);
   }
-  await page.getByPlaceholder("输入后续修改要求").fill(`用一句话回复：${marker}`);
+  await page
+    .getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)
+    .fill(`用一句话回复：${marker}`);
   await page.getByTestId("send-turn-button").click();
 }
 
@@ -266,7 +268,9 @@ export async function selectSidebarThread(page: Page, threadId: string) {
 }
 
 export async function sendSteerText(page: Page, marker: string) {
-  await page.getByPlaceholder("输入后续修改要求").fill(`追加要求：${marker}`);
+  await page
+    .getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)
+    .fill(`追加要求：${marker}`);
   await page.getByTestId("send-turn-button").click();
 }
 
@@ -316,7 +320,7 @@ async function openSettings(page: Page) {
   await expect(page.getByTestId("settings-panel")).toBeVisible();
 }
 
-async function openSettingsTab(page: Page, tabName: string) {
+async function openSettingsTab(page: Page, tabName: string | RegExp) {
   await openSettings(page);
   await page.getByRole("tab", { name: tabName }).click();
 }

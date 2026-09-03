@@ -14,6 +14,7 @@ export const pinnedThreadSchema = z
     subtitle: z.string().trim().nullable().optional(),
     projectName: z.string().trim().nullable().optional(),
     updatedAt: z.coerce.number().nullable().optional(),
+    inactive: z.boolean().optional(),
   })
   .strict();
 
@@ -114,6 +115,7 @@ export function parseGatewayConfig(body: unknown): GatewayConfig {
       subtitle: trimmedOrNull(thread.subtitle),
       projectName: trimmedOrNull(thread.projectName),
       updatedAt: thread.updatedAt ?? null,
+      inactive: thread.inactive === true,
     })),
     notifications: {
       bark: {

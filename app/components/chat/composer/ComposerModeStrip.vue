@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useTimestamp } from "@vueuse/core";
-import { XIcon } from "@lucide/vue";
+import { TargetIcon, XIcon } from "@lucide/vue";
 import { computed, watch } from "vue";
 import type { ThreadGoal } from "~~/shared/types";
 import ComposerGoalDetailsDialog from "@/components/chat/composer/ComposerGoalDetailsDialog.vue";
@@ -86,8 +86,9 @@ watch(
 
     <div
       v-if="showGoalInputHint"
-      class="flex min-w-0 items-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-ink shadow-sm shadow-ink/5 md:text-base"
+      class="gateway-goal-strip flex min-w-0 items-center gap-2 rounded-2xl border border-primary/55 bg-primary/15 px-3 py-2 text-sm text-ink shadow-sm shadow-primary/15 md:text-base"
     >
+      <TargetIcon class="size-4 shrink-0 text-primary" aria-hidden="true" />
       <span class="shrink-0 font-medium text-primary">{{ $t("app.goalModeActive") }}</span>
       <span class="min-w-0 truncate text-ink-secondary">{{ $t("app.goalInputHint") }}</span>
     </div>

@@ -54,6 +54,7 @@ const loading = ref(false);
 const searchError = ref<string | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchController: AbortController | null = null;
+let viewportFrame: number | null = null;
 let syncing = false;
 
 class FileReferenceWidget extends WidgetType {
@@ -80,14 +81,40 @@ onMounted(() => {
     parent: container.value,
     state: EditorState.create({ doc: props.modelValue, extensions: extensions() }),
   });
+  window.visualViewport?.addEventListener("resize", queueSelectionIntoView);
+  window.visualViewport?.addEventListener("scroll", queueSelectionIntoView);
 });
 
 onBeforeUnmount(() => {
   if (searchTimer) clearTimeout(searchTimer);
+  if (viewportFrame !== null) cancelAnimationFrame(viewportFrame);
+  window.visualViewport?.removeEventListener("resize", queueSelectionIntoView);
+  window.visualViewport?.removeEventListener("scroll", queueSelectionIntoView);
   searchController?.abort();
   view.value?.destroy();
   view.value = null;
 });
+
+function queueSelectionIntoView() {
+  if (viewportFrame !== null) cancelAnimationFrame(viewportFrame);
+  viewportFrame = requestAnimationFrame(() => {
+    viewportFrame = null;
+    const editor = view.value;
+    if (!editor?.hasFocus) return;
+    editor.requestMeasure();
+    editor.dispatch({
+      effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: "nearest" }),
+    });
+  });
+}
+
+function focus() {
+  if (props.disabled) return;
+  view.value?.focus();
+  queueSelectionIntoView();
+}
+
+defineExpose({ focus });
 
 watch(
   () => props.modelValue,
@@ -150,11 +177,20 @@ function extensions(): Extension[] {
           emit("paste", event);
           return event.defaultPrevented;
         },
+        focus: () => {
+          queueSelectionIntoView();
+          return false;
+        },
       }),
     ),
     EditorView.contentAttributes.of({
       "aria-label": props.placeholder,
       placeholder: props.placeholder,
+      spellcheck: "true",
+      autocapitalize: "sentences",
+      autocorrect: "on",
+      inputmode: "text",
+      enterkeyhint: "enter",
       "data-testid": "composer-input",
       "data-value": props.modelValue,
     }),
@@ -301,7 +337,7 @@ function selectFile(file: FileReference) {
     );
   }
   dismissMenu();
-  editor.focus();
+  focus();
 }
 
 function dismissMenu() {
@@ -325,17 +361,60 @@ function dismissMenu() {
     @hover="selectedIndex = $event"
     @select="selectFile"
   />
-  <div ref="container" data-testid="composer-editor" class="composer-editor" />
+  <div
+    ref="container"
+    data-testid="composer-editor"
+    class="composer-editor relative"
+    :class="{ 'composer-empty': !modelValue }"
+  />
 </template>
 
 <style>
 .composer-editor .cm-editor {
   max-height: min(28dvh, 10rem);
   min-height: 3.25rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
   background: transparent;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+.composer-editor.composer-empty:not(:focus-within)::before {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.25rem;
+  z-index: 1;
+  width: 2px;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--primary);
+  content: "";
+  pointer-events: none;
+  animation: composer-caret-blink 1.05s steps(1, end) infinite;
+}
+@keyframes composer-caret-blink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  49%,
+  100% {
+    opacity: 0.15;
+  }
+}
+.composer-editor:focus-within .cm-editor {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent),
+    0 0 18px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 .composer-editor .cm-scroller {
   overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 1rem;
   font-family: inherit;
 }
 .composer-editor .cm-content {
@@ -343,7 +422,10 @@ function dismissMenu() {
   padding: 0.5rem 0.25rem;
   font-size: 1rem;
   line-height: 1.5rem;
-  caret-color: var(--ink);
+  caret-color: var(--primary);
+}
+.composer-editor .cm-focused .cm-content {
+  caret-color: var(--primary);
 }
 .composer-editor .cm-focused {
   outline: none;
@@ -369,6 +451,15 @@ function dismissMenu() {
   font-size: 0.875rem;
   vertical-align: baseline;
   white-space: nowrap;
+}
+@media (max-width: 47.999rem) {
+  .composer-editor:focus-within .cm-editor,
+  .composer-editor:focus-within .cm-content {
+    min-height: min(32dvh, 12rem);
+  }
+  .composer-editor:focus-within .cm-editor {
+    max-height: min(48dvh, 18rem);
+  }
 }
 @media (min-width: 48rem) {
   .composer-editor .cm-editor {

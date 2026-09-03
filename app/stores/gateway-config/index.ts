@@ -92,6 +92,10 @@ export const useGatewayConfigStore = defineStore("gateway-config", () => {
     return true;
   }
 
+  async function setPinnedThreadInactive(thread: PinnedThreadRecord, inactive: boolean) {
+    return setPinnedThread({ ...thread, inactive }, true);
+  }
+
   function resetState() {
     gatewayConfig.value = defaultGatewayConfig();
     pinnedThreadSync.reset();
@@ -106,6 +110,7 @@ export const useGatewayConfigStore = defineStore("gateway-config", () => {
     importConfigText,
     saveNotificationSettings,
     setPinnedThread,
+    setPinnedThreadInactive,
     refreshPinnedThreads: pinnedThreadSync.refresh,
     resetState,
   };

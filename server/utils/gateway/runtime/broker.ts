@@ -24,8 +24,18 @@ class ThreadBroker {
     projectId: number | null,
     limit = INITIAL_TURN_PAGE_LIMIT,
     controller?: Awaited<ThreadSubscriptionLease["ready"]>,
+    projectCwd?: string | null,
+    afterEventId?: number,
   ) {
-    return this.openService.openThread(host, threadId, projectId, limit, controller);
+    return this.openService.openThread(
+      host,
+      threadId,
+      projectId,
+      limit,
+      controller,
+      projectCwd,
+      afterEventId,
+    );
   }
 
   async startThread(host: HostRecord, params: Record<string, unknown>, projectId: number | null) {

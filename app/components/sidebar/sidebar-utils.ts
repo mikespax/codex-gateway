@@ -1,4 +1,5 @@
 import type { HostRecord, PinnedThreadRecord } from "./sidebar-types";
+import type { ThreadActivitySummary } from "@/stores/gateway-thread-activity";
 
 const threadStatusClassByStatus: Record<string, string> = {
   running: "text-primary",
@@ -73,15 +74,21 @@ function compareSidebarLabels(left: string, right: string) {
 
 /**
  * Returns a display-only copy so deterministic sidebar ordering never rewrites the user's
- * persisted pin list. The explicit locale and identity tie-breakers keep the order identical
- * across browsers even when labels compare equal under case-insensitive collation.
+ * persisted pin list. Rows move up only after a turn completes; tool and code activity updates do
+ * not reshuffle an active sidebar. Host/title/identity tie-breakers keep the order deterministic
+ * when timestamps compare equal.
  */
 export function sortPinnedThreadsForDisplay(
   threads: readonly PinnedThreadRecord[],
   hosts: readonly HostRecord[],
+  activityByKey: Readonly<Record<string, ThreadActivitySummary>> = {},
 ) {
   const hostNames = new Map(hosts.map((host) => [host.id, host.name]));
   return threads.toSorted((left, right) => {
+    const byActivity =
+      pinnedThreadActivityAt(right, activityByKey) - pinnedThreadActivityAt(left, activityByKey);
+    if (byActivity !== 0) return byActivity;
+
     const byHostName = compareSidebarLabels(
       hostNames.get(left.hostId) ?? "",
       hostNames.get(right.hostId) ?? "",
@@ -97,6 +104,19 @@ export function sortPinnedThreadsForDisplay(
   });
 }
 
+function pinnedThreadActivityAt(
+  thread: PinnedThreadRecord,
+  activityByKey: Readonly<Record<string, ThreadActivitySummary>>,
+) {
+  const activity = activityByKey[pinnedThreadKey(thread)];
+  const completionAt = activity?.completionAt;
+  return typeof completionAt === "number" && Number.isFinite(completionAt)
+    ? completionAt
+    : typeof activity?.displayActivityAt === "number" && Number.isFinite(activity.displayActivityAt)
+      ? activity.displayActivityAt
+      : Number(thread.updatedAt ?? 0);
+}
+
 export function threadKey(hostId: number, threadId: string) {
   return `${hostId}:${threadId}`;
 }
@@ -110,7 +130,11 @@ export function statusLabelKey(status: string) {
 }
 
 export function selectedRowClass(selected: boolean) {
-  return selected ? "bg-primary/10 text-ink shadow-[inset_3px_0_0_var(--primary)]" : "";
+  return selected ? "gateway-sidebar-row-selected text-ink" : "";
+}
+
+export function completionAttentionClass(attention: boolean) {
+  return attention ? "gateway-sidebar-row-attention" : "";
 }
 
 export function hostConnectionClass(status: string) {

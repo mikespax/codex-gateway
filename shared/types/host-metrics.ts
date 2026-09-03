@@ -87,3 +87,12 @@ export interface HostMetricsSnapshot {
   samples: HostMetricsSample[];
   gpuProcesses: HostGpuProcessSnapshot | null;
 }
+
+/** Compact, user-scoped host resource data used by the sidebar summary. */
+export interface HostResourceUsageSummary {
+  hostId: number;
+  status: HostMetricsCollectorStatus;
+  cpuPercent: number | null;
+  memoryPercent: number | null;
+  sampledAt: string | null;
+}

@@ -1,7 +1,7 @@
 import { Orientation } from "dockview-vue";
 import type { DockviewApi, IDockviewPanel, SerializedDockview } from "dockview-vue";
 
-import type { ComputedRef, Ref } from "vue";
+import type { ComputedRef } from "vue";
 import { useGatewayTerminalTransport } from "@/composables/terminal/useGatewayTerminalTransport";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { useGatewayWorkspaceLayoutStore } from "@/stores/gateway-workspace-layout";
@@ -27,7 +27,7 @@ interface PanelDefinition {
 const DEFAULT_GROUP_ID = "workspace-default-group";
 
 export function useWorkspaceDockPanels(options: {
-  selectedThreadId: Ref<string | null>;
+  agentPanelTitle: ComputedRef<string>;
   terminalPanels: ComputedRef<Array<{ id: string; session: { sessionId: string; title: string } }>>;
   subAgentPanels: ComputedRef<
     Array<{ id: string; hostId: number; threadId: string; title: string }>
@@ -36,6 +36,7 @@ export function useWorkspaceDockPanels(options: {
   tmuxPanels: ComputedRef<Array<{ id: string }>>;
   hostMetricsPanel: ComputedRef<Array<{ id: string; hostId: number }>>;
   gitReviewPanel: ComputedRef<Array<{ id: string }>>;
+  filesPanelOpen: ComputedRef<boolean>;
   scopeKey: ComputedRef<string>;
 }) {
   const { t } = useI18n();
@@ -51,12 +52,12 @@ export function useWorkspaceDockPanels(options: {
     const panels: PanelDefinition[] = [
       {
         id: AGENT_WORKSPACE_PANEL_ID,
-        title: t("app.agentTab"),
+        title: options.agentPanelTitle.value,
         component: workspacePanelPolicy("agent").component,
         params: { kind: "agent" },
       },
     ];
-    if (options.selectedThreadId.value !== null) {
+    if (options.filesPanelOpen.value) {
       panels.push({
         id: FILES_WORKSPACE_PANEL_ID,
         title: t("app.filesTab"),
@@ -211,9 +212,7 @@ export function useWorkspaceDockPanels(options: {
         break;
       case "gitReview":
         gitReviewPanels.close(options.scopeKey.value);
-        // Source-control review is launched from Files. Returning there is deterministic on both
-        // desktop and locked mobile Dockview; the generic dynamic-panel fallback prefers Agent.
-        workspaceLayout.requestPanelActivation(FILES_WORKSPACE_PANEL_ID);
+        workspaceLayout.requestPanelActivation(AGENT_WORKSPACE_PANEL_ID);
         return;
       case "agent":
       case "files":

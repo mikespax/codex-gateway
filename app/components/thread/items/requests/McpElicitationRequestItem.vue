@@ -56,7 +56,7 @@ async function respond(action: "accept" | "decline" | "cancel") {
       v-if="params.url"
       :href="params.url"
       target="_blank"
-      rel="noreferrer"
+      rel="noopener noreferrer"
       class="mt-2 inline-flex items-center gap-1 text-primary underline"
     >
       <ExternalLinkIcon class="size-3" />

@@ -1,14 +1,34 @@
 <script setup lang="ts">
-import { ActivityIcon, ChartNoAxesCombinedIcon, GlobeIcon, TerminalIcon } from "@lucide/vue";
+import {
+  ActivityIcon,
+  ChartNoAxesCombinedIcon,
+  GlobeIcon,
+  PlusIcon,
+  TerminalIcon,
+} from "@lucide/vue";
 import { Button } from "@codex-gateway/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@codex-gateway/ui/dropdown-menu";
 import { SidebarTrigger } from "@codex-gateway/ui/sidebar";
+import type { HostRecord } from "~~/shared/types";
 
-defineProps<{ title: string; canLaunch: boolean; tmuxActiveCount: number }>();
+const props = defineProps<{
+  title: string;
+  canLaunch: boolean;
+  tmuxActiveCount: number;
+  hosts: HostRecord[];
+}>();
 const emit = defineEmits<{
   openTerminal: [];
   openBrowser: [];
   openTmux: [];
   openHostMonitor: [];
+  newThread: [hostId: number];
 }>();
 </script>
 
@@ -69,6 +89,39 @@ const emit = defineEmits<{
     >
       <GlobeIcon class="size-4" />
     </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger as-child>
+        <Button
+          data-testid="new-thread-button"
+          variant="ghost"
+          size="icon"
+          class="size-8 shrink-0"
+          :title="$t('app.newThread')"
+          :aria-label="$t('app.newThread')"
+        >
+          <PlusIcon class="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" class="w-64">
+        <DropdownMenuLabel>{{ $t("app.newThreadChooseHost") }}</DropdownMenuLabel>
+        <DropdownMenuItem v-if="props.hosts.length === 0" disabled>
+          {{ $t("app.newThreadNoHosts") }}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          v-for="host in props.hosts"
+          :key="host.id"
+          :data-testid="`new-thread-host-option-${host.id}`"
+          @select="emit('newThread', host.id)"
+        >
+          <span class="flex min-w-0 flex-col">
+            <span class="truncate">{{ host.name || host.sshHost }}</span>
+            <span v-if="host.name" class="truncate text-[0.625rem] text-muted-foreground">
+              {{ host.sshHost }}
+            </span>
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
     <SidebarTrigger
       data-testid="desktop-sidebar-collapse"
       class="size-8 shrink-0"

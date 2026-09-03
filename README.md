@@ -1,6 +1,4 @@
-
-
-# Codex Gateway
+# Codex Gateway Extended
 
 [![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)](nuxt.config.ts)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](package.json)
@@ -12,7 +10,34 @@
 
 English | [中文](README.zh-CN.md)
 
-Codex Gateway is a web frontend and connection gateway for the official Codex app-server.
+**A mobile-first, multi-host command center for official Codex app-server
+sessions.**
+
+Codex Gateway Extended is designed for running serious Codex work from phones
+and browsers. It adds resilient conversation routing, readable live progress,
+document and archive uploads, cross-host navigation, native Android completion
+replies, and scoped read-only supervision while keeping the official Codex
+app-server thread as the source of truth.
+
+> [!NOTE]
+> This is a deployment-focused fork of
+> [Codex Gateway](https://github.com/yunhaoli24/codex-gateway). See the
+> [exhaustive fork inventory](docs/spax-fork-customizations.md) for screenshots,
+> the complete 34-commit change map, security boundaries, deployment status, and
+> upstream contribution strategy.
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="docs/assets/spax-customizations/mobile-running-turn.png"><img src="docs/assets/spax-customizations/mobile-running-turn.png" alt="Codex Gateway Extended mobile running-turn view" width="100%"></a>
+    </td>
+    <td width="50%">
+      <a href="docs/assets/spax-customizations/mobile-model-effort-dialog.png"><img src="docs/assets/spax-customizations/mobile-model-effort-dialog.png" alt="Codex Gateway Extended mobile model and effort confirmation" width="100%"></a>
+    </td>
+  </tr>
+</table>
+
+Under the hood, Codex Gateway is a web frontend and connection gateway for the official Codex app-server.
 
 It is not a reimplementation of Codex, and it does not run an agent runtime in the browser. The browser talks only to Codex Gateway. Gateway connects to your remote machines over SSH, manages the official `codex app-server` lifecycle, and renders official app-server threads, events, approvals, file changes, images, diffs, terminal output, and sub-agent activity in a web UI.
 
@@ -172,8 +197,9 @@ Core rules:
 Prerequisites: Docker with Compose, Git, and network access from Gateway to the SSH hosts you want to manage.
 
 ```bash
-git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
-cd codex-gateway
+git clone --recurse-submodules --branch spax/customizations-20260824 \
+  https://github.com/mikespax/codex-gateway-extended.git
+cd codex-gateway-extended
 
 cp .env.example .env
 # Replace CODEX_GATEWAY_CONFIG_SECRET in .env with: openssl rand -hex 32
@@ -202,18 +228,43 @@ pnpm build
 pnpm test:e2e
 ```
 
+### Mac E2E runner
+
+The containerized E2E suite can run from a local Mac checkout, keeping its real Docker SSH
+targets, Gateway server, preview ingress, and Playwright topology intact. This is opt-in; it does
+not use a remote Docker socket or modify the VPS. After pushing the branch to the fork, clone it
+on the Mac and run:
+
+```bash
+git clone --recurse-submodules --branch spax/customizations-20260824 \
+  https://github.com/mikespax/codex-gateway-extended.git \
+  ~/src/codex-gateway-extended
+cd ~/src/codex-gateway-extended
+scripts/run-e2e-on-mac.sh
+```
+
+The wrapper checks for a real Mac checkout, Docker Desktop, Compose v2, and a readable Codex
+configuration directory before starting. It defaults the E2E build container to `8g` and V8 old
+space to `6144` MiB; override `E2E_BUILD_MEMORY_LIMIT` and `E2E_BUILD_NODE_OPTIONS` when needed.
+Docker Desktop's configured VM memory is the effective limit, not the Mac's physical RAM. The
+Mac runner should therefore have at least 12 GiB assigned to Docker Desktop for the default
+override. It also enables Docker Compose Bake by default for parallel cache-aware builds; set
+`COMPOSE_BAKE=false` if Docker Desktop is configured without Bake. BuildKit persists only
+disposable pnpm and Vite/Nuxt transform caches; `.nuxt`, `.output`, test data, and Codex
+configuration remain run-specific.
+
 Environment variables:
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `CODEX_GATEWAY_CONFIG_SECRET` | Yes in production | Stable secret used to encrypt stored host/project/thread config. |
-| `CODEX_GATEWAY_DB_PATH` | No | SQLite database path. Defaults to the app data path; Docker uses `/data/codex-gateway.db`. |
-| `HOST` | No | Nuxt listen host. Docker uses `0.0.0.0`. |
-| `PORT` | No | Nuxt listen port. Docker uses `3000`. |
-| `BROWSER_PREVIEW_DOMAIN` | Browser preview | Parent domain for isolated preview origins; configure wildcard DNS for `p-*.your-domain`. |
-| `BROWSER_PREVIEW_SECRET` | No | HMAC secret for stable per-user/Host/target preview origins. Defaults to `CODEX_GATEWAY_CONFIG_SECRET`. |
-| `BROWSER_PREVIEW_SCHEME` | No | Public preview scheme, `https` by default. Use `http` only for local E2E/development. |
-| `BROWSER_PREVIEW_PUBLIC_PORT` | No | Optional public port included in preview origins for local development. |
+| Variable                      | Required          | Description                                                                                             |
+| ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+| `CODEX_GATEWAY_CONFIG_SECRET` | Yes in production | Stable secret used to encrypt stored host/project/thread config.                                        |
+| `CODEX_GATEWAY_DB_PATH`       | No                | SQLite database path. Defaults to the app data path; Docker uses `/data/codex-gateway.db`.              |
+| `HOST`                        | No                | Nuxt listen host. Docker uses `0.0.0.0`.                                                                |
+| `PORT`                        | No                | Nuxt listen port. Docker uses `3000`.                                                                   |
+| `BROWSER_PREVIEW_DOMAIN`      | Browser preview   | Parent domain for isolated preview origins; configure wildcard DNS for `p-*.your-domain`.               |
+| `BROWSER_PREVIEW_SECRET`      | No                | HMAC secret for stable per-user/Host/target preview origins. Defaults to `CODEX_GATEWAY_CONFIG_SECRET`. |
+| `BROWSER_PREVIEW_SCHEME`      | No                | Public preview scheme, `https` by default. Use `http` only for local E2E/development.                   |
+| `BROWSER_PREVIEW_PUBLIC_PORT` | No                | Optional public port included in preview origins for local development.                                 |
 
 Create an admin user:
 

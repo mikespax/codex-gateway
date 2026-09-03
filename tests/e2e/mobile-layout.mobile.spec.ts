@@ -41,7 +41,33 @@ import {
 } from "./helpers/remote-codex";
 
 test("uses the mobile layout with hidden sidebar and usable composer shell", async ({ page }) => {
+  await page.route("**/api/hosts/1/codex-usage", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        hostId: 1,
+        limitId: "codex",
+        limitName: "Codex",
+        planType: "pro",
+        primary: {
+          usedPercent: 27,
+          remainingPercent: 73,
+          windowDurationMins: 300,
+          resetsAt: null,
+        },
+        secondary: null,
+        observedAt: Date.now(),
+      }),
+    });
+  });
   await openApp(page);
+  const threadId = "mobile-header-usage";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile header usage" },
+  });
 
   await expect(page.getByTestId("mobile-layout")).toBeVisible();
   await expect(page.getByTestId("desktop-layout")).toBeHidden();
@@ -53,14 +79,266 @@ test("uses the mobile layout with hidden sidebar and usable composer shell", asy
   await expect(page.getByTestId("settings-toggle")).toBeHidden();
 
   await expect(page.getByTestId("chat-scroll-area")).toBeVisible();
-  await expect(page.getByText("先选择一个项目")).toBeVisible();
+  await expect(page.getByTestId("codex-usage-badge")).toHaveText("73%");
+  await expect(page.getByTestId("codex-usage-badge")).toHaveAttribute("aria-label", /73%/);
+  await expect(page.getByTestId("decrease-chat-text-size")).toBeVisible();
+  await expect(page.getByTestId("increase-chat-text-size")).toBeVisible();
+  await expect(page.getByTestId("open-tmux-mobile-button")).toHaveCount(0);
+  await expect(page.getByTestId("open-host-monitor-mobile-button")).toHaveCount(0);
+  await expect(page.getByTestId("open-browser-mobile-button")).toHaveCount(0);
+  await expect(page.getByTestId("open-terminal-mobile-button")).toHaveCount(0);
+
+  const titleBox = await page.getByTestId("mobile-thread-title").boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(titleBox!.width).toBeGreaterThan(120);
+});
+
+test("persists chat-only text size controls in the mobile header", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-chat-text-size";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile chat text size" },
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "mobile-chat-text-size-turn",
+            status: "completed",
+            items: [
+              {
+                id: "mobile-chat-text-size-user",
+                type: "userMessage",
+                content: [{ type: "text", text: "Keep the composer size unchanged." }],
+              },
+              {
+                id: "mobile-chat-text-size-agent",
+                type: "agentMessage",
+                phase: "final_answer",
+                text: "Increase only the conversation text.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  const timeline = page.getByTestId("chat-scroll-area");
+  const conversationText = timeline.locator(".markdown-content").last();
+  const composer = page.getByTestId("composer-input");
+  await expect(timeline).toHaveAttribute("data-chat-text-size", "default");
+  await expect(conversationText).toBeVisible();
+
+  const initialConversationSize = await conversationText.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  const initialComposerSize = await composer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+
+  await page.getByTestId("increase-chat-text-size").click();
+  await expect(timeline).toHaveAttribute("data-chat-text-size", "large");
+
+  const increasedConversationSize = await conversationText.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  const unchangedComposerSize = await composer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  expect(increasedConversationSize).toBeGreaterThan(initialConversationSize);
+  expect(unchangedComposerSize).toBe(initialComposerSize);
+
+  const storageState = await page.context().storageState();
+  const persistedPreferences = storageState.origins
+    .flatMap((origin) => origin.localStorage)
+    .filter(({ name }) => name.endsWith(":chat-text-size"))
+    .map(({ value }) => value);
+  expect(persistedPreferences).toContain("large");
+
+  await page.getByTestId("decrease-chat-text-size").click();
+  await expect(timeline).toHaveAttribute("data-chat-text-size", "default");
+});
+
+test("expands the focused composer in a keyboard-sized mobile viewport", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-focused-composer";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile focused composer" },
+  });
+
+  const composer = page.getByTestId("composer-input");
+  await composer.fill(
+    Array.from(
+      { length: 18 },
+      (_, index) => `Draft line ${index + 1} stays reviewable while the mobile keyboard is open.`,
+    ).join("\n"),
+  );
+  await composer.focus();
+  await page.setViewportSize({ width: 393, height: 520 });
+  await waitForAnimationFrames(page, 3);
+
+  const metrics = await composer.evaluate((element) => {
+    const editor = element.closest<HTMLElement>(".cm-editor");
+    const scroller = editor?.querySelector<HTMLElement>(".cm-scroller");
+    const selection = window.getSelection();
+    const caret =
+      selection && selection.rangeCount > 0
+        ? selection.getRangeAt(0).getBoundingClientRect()
+        : null;
+    const editorBox = editor?.getBoundingClientRect();
+    const scrollerBox = scroller?.getBoundingClientRect();
+    return {
+      caretBottom: caret?.bottom ?? null,
+      caretTop: caret?.top ?? null,
+      editorBottom: editorBox?.bottom ?? null,
+      editorHeight: editorBox?.height ?? 0,
+      scrollTop: scroller?.scrollTop ?? 0,
+      scrollerBottom: scrollerBox?.bottom ?? null,
+      scrollerTop: scrollerBox?.top ?? null,
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  expect(metrics.editorHeight).toBeGreaterThan(metrics.viewportHeight * 0.28);
+  expect(metrics.editorHeight).toBeLessThanOrEqual(metrics.viewportHeight * 0.5);
+  expect(metrics.editorBottom).not.toBeNull();
+  expect(metrics.editorBottom!).toBeLessThanOrEqual(metrics.viewportHeight);
+  expect(metrics.scrollTop).toBeGreaterThan(0);
+  expect(metrics.caretTop).not.toBeNull();
+  expect(metrics.caretBottom).not.toBeNull();
+  expect(metrics.scrollerTop).not.toBeNull();
+  expect(metrics.scrollerBottom).not.toBeNull();
+  expect(metrics.caretTop!).toBeGreaterThanOrEqual(metrics.scrollerTop!);
+  expect(metrics.caretBottom!).toBeLessThanOrEqual(metrics.scrollerBottom!);
+
+  const composerSurfaceBox = await page.getByTestId("composer-surface").boundingBox();
+  expect(composerSurfaceBox).not.toBeNull();
+  expect(
+    metrics.viewportHeight - composerSurfaceBox!.y - composerSurfaceBox!.height,
+  ).toBeGreaterThanOrEqual(15);
+});
+
+test("keeps plain Enter multiline and enables browser text assistance", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-multiline-composer";
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Mobile multiline composer" },
+  });
+
+  const composer = page.getByTestId("composer-input");
+  await expect(composer).toHaveAttribute("spellcheck", "true");
+  await expect(composer).toHaveAttribute("autocapitalize", "sentences");
+  await expect(composer).toHaveAttribute("autocorrect", "on");
+  await expect(composer).toHaveAttribute("enterkeyhint", "enter");
+
+  await composer.fill("Keep this draft");
+  await composer.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("on a second line");
+
+  await expect(composer).toHaveAttribute("data-value", "Keep this draft\non a second line");
+});
+
+test("recalls the latest request above active intermediate work", async ({ page }) => {
+  await openApp(page);
+  const threadId = "mobile-active-request-recall";
+  const latestRequest = [
+    "Audit the production workflow and preserve the existing safety gates.",
+    "Keep customer sends disabled while validating the current worker, queue, and dashboard state.",
+    "Report the evidence and the safest next action before changing any external service.",
+  ].join(" ");
+  await seedGatewayThread(page, {
+    projectId: 1,
+    threadId,
+    currentThread: { id: threadId, name: "Active request recall" },
+    status: "running",
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "active-request-recall-turn",
+            status: "inProgress",
+            items: [
+              {
+                id: "active-request-recall-user",
+                type: "userMessage",
+                content: [{ type: "text", text: latestRequest }],
+              },
+              {
+                id: "active-request-recall-reasoning",
+                type: "reasoning",
+                status: "inProgress",
+                summary: ["Checking the current production state"],
+              },
+              {
+                id: "active-request-recall-search",
+                type: "webSearch",
+                status: "inProgress",
+                query: "current production notification layout and mobile background activity",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  const userMessage = page.getByText(latestRequest, { exact: true });
+  const intermediateToggle = page.getByRole("button", { name: /Intermediate steps|中间过程/ });
+  await expect(userMessage).toBeVisible();
+  await expect(page.getByTestId("active-prompt-recall")).toHaveCount(0);
+  await expect(intermediateToggle).toBeVisible();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
+  await expect(page.getByTestId("intermediate-steps-working")).toBeVisible();
+  await expect(page.getByTestId("stop-turn-button")).toBeHidden();
+  await expect(page.getByTestId("send-turn-button")).toBeVisible();
+
+  const [messageBox, toggleBox] = await Promise.all([
+    userMessage.boundingBox(),
+    intermediateToggle.boundingBox(),
+  ]);
+  expect(messageBox).not.toBeNull();
+  expect(toggleBox).not.toBeNull();
+  expect(messageBox!.y + messageBox!.height).toBeLessThanOrEqual(toggleBox!.y);
+});
+
+test("native Android delivery replaces mobile browser notification toasts", async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    driver.publishNotification({
+      key: "e2e-mobile-native-notification",
+      title: "Turn finished",
+      body: "This notification should only appear in the native companion app.",
+      target: { kind: "thread", hostId: 1, projectId: 1, threadId: "mobile-notification" },
+    });
+  });
+
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" }),
+  ).toHaveCount(0);
 });
 
 test("shows effort and compact context usage without mobile approval controls", async ({
   page,
 }) => {
   await openApp(page);
+  const settingsUpdates: Array<Record<string, unknown>> = [];
   await page.route("**/api/threads/settings", async (route) => {
+    const body: unknown = route.request().postDataJSON();
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      throw new Error("settings request body must be an object");
+    }
+    settingsUpdates.push(asRecord(body));
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   const threadId = "mobile-composer-settings";
@@ -87,11 +365,18 @@ test("shows effort and compact context usage without mobile approval controls", 
           { reasoningEffort: "medium" },
           { reasoningEffort: "high" },
         ],
+        serviceTiers: [{ id: "fast", name: "Fast", description: "Prioritize lower latency" }],
       },
       {
         id: "gpt-5.6-sol",
         model: "gpt-5.6-sol",
         displayName: "GPT-5.6 Sol",
+        supportedReasoningEfforts: [
+          { reasoningEffort: "low" },
+          { reasoningEffort: "medium" },
+          { reasoningEffort: "high" },
+        ],
+        serviceTiers: [{ id: "fast", name: "Fast", description: "Prioritize lower latency" }],
       },
     ],
     tokenUsage: {
@@ -106,35 +391,77 @@ test("shows effort and compact context usage without mobile approval controls", 
   await expect(page.getByText("完全访问", { exact: true })).toBeHidden();
   const contextMeter = page.getByTestId("context-usage-meter");
   await expect(contextMeter).toBeVisible();
-  await expect(contextMeter).toHaveAttribute("aria-label", "上下文用量 50%");
+  await expect(contextMeter).toHaveAttribute("aria-label", /50%/);
   await expect(contextMeter.getByText("50%", { exact: true })).toBeHidden();
 
   await page.getByTestId("model-select").click();
-  const modelSearch = page.getByPlaceholder("搜索模型或推理强度");
-  await expect(modelSearch).toBeVisible();
-  await expect(modelSearch).not.toBeFocused();
-  await modelSearch.click();
-  await expect(modelSearch).toBeFocused();
-  await modelSearch.fill("luna");
+  await expect(page.getByTestId("model-selector-dialog")).toBeVisible();
+  await expect(page.getByTestId("reasoning-effort-select")).toContainText("Medium");
+  await expect(page.getByTestId("model-dropdown-select")).toContainText("GPT-5.6 Luna");
+
+  await page.getByTestId("reasoning-effort-select").click();
+  await page.getByTestId("effort-option-high").click();
+  await page.getByTestId("model-dropdown-select").click();
   await expect(page.getByTestId("model-option-gpt-5.6-luna")).toBeVisible();
-  await expect(page.getByTestId("model-option-gpt-5.6-sol")).toBeHidden();
-  await modelSearch.fill("");
-
-  await page.getByText("High", { exact: true }).click();
-  await expect(modelSearch).toBeVisible();
-  await expect(page.getByTestId("model-select")).toContainText("High");
   await page.getByTestId("model-option-gpt-5.6-sol").click();
-  await expect(modelSearch).toBeVisible();
-  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Sol");
+  await expect(page.getByTestId("model-select")).toContainText("Medium");
+  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Luna");
+  expect(settingsUpdates).toHaveLength(0);
 
-  await page.getByTestId("model-selector-close").click();
-  await expect(modelSearch).toBeHidden();
+  await page.getByTestId("model-selector-cancel").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  await expect(page.getByTestId("model-select")).toContainText("Medium");
+  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Luna");
+
   await page.getByTestId("model-select").click();
-  await expect(modelSearch).toBeVisible();
-  await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 4, y: 4 } });
-  await expect(modelSearch).toBeHidden();
+  await page.getByTestId("reasoning-effort-select").click();
+  await page.getByTestId("effort-option-high").click();
+  await page.getByTestId("model-dropdown-select").click();
+  await page.getByTestId("model-option-gpt-5.6-sol").click();
+  await page.getByTestId("service-tier-select").click();
+  await page.getByTestId("service-tier-option-fast").click();
+  await page.getByTestId("model-selector-ok").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  await expect(page.getByTestId("model-select")).toContainText("High");
+  await expect(page.getByTestId("model-select")).toContainText("GPT-5.6 Sol");
+  expect(settingsUpdates).toHaveLength(1);
+  expect(settingsUpdates[0]).toMatchObject({
+    hostId: 1,
+    threadId,
+    model: "gpt-5.6-sol",
+    effort: "high",
+    serviceTier: "fast",
+  });
 
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByTestId("model-select").click();
+  await page.getByTestId("reasoning-effort-select").click();
+  await page.getByTestId("effort-option-low").click();
+  await page.getByTestId("model-selector-close").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  await expect(page.getByTestId("model-select")).toContainText("High");
+  await page.getByTestId("model-select").click();
+  await expect(page.getByTestId("model-selector-dialog")).toBeVisible();
+  await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 4, y: 4 } });
+  await expect(page.getByTestId("model-selector-dialog")).toBeHidden();
+  expect(settingsUpdates).toHaveLength(1);
+
+  const attachmentInput = page.getByTestId("attachment-input");
+  await expect(page.getByTestId("attachment-button")).toBeVisible();
+  await page.getByTestId("attachment-button").click();
+  await expect(page.getByTestId("attach-documents-option")).toBeVisible();
+  await expect(page.getByTestId("attach-media-option")).toBeVisible();
+  const documentChooser = page.waitForEvent("filechooser");
+  await page.getByTestId("attach-documents-option").click();
+  expect((await documentChooser).isMultiple()).toBe(true);
+
+  await page.getByTestId("attachment-button").click();
+  await expect(page.getByTestId("attach-media-option")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const mediaAttachmentInput = page.getByTestId("media-attachment-input");
+  await expect(attachmentInput).toHaveAttribute("accept", /application\/\*/);
+  await expect(mediaAttachmentInput).toHaveAttribute("accept", "image/*,video/*");
+  await mediaAttachmentInput.setInputFiles({
     name: "mobile-preview.png",
     mimeType: "image/png",
     buffer: Buffer.from(
@@ -143,9 +470,43 @@ test("shows effort and compact context usage without mobile approval controls", 
     ),
   });
   await expect(page.getByAltText("mobile-preview.png")).toBeVisible();
-  await page.getByRole("button", { name: "移除附件" }).click();
+  await page.getByRole("button", { name: /Remove attachment|移除附件/ }).click();
   await expect(page.getByAltText("mobile-preview.png")).toHaveCount(0);
+
+  let uploadCount = 0;
+  await page.route("**/api/uploads?*", async (route) => {
+    uploadCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        files: [
+          {
+            name: "mobile-assets.zip",
+            path: "/tmp/codex-gateway-uploads/upload.test/mobile-assets.zip",
+            mimeType: "application/zip",
+            size: 24,
+            isImage: false,
+          },
+        ],
+      }),
+    });
+  });
+  await attachmentInput.setInputFiles({
+    name: "mobile-assets.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  });
+  await expect(page.getByTestId("composer-surface")).toContainText("mobile-assets.zip");
+  expect(uploadCount).toBe(1);
 });
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("expected an object");
+  }
+  return Object.fromEntries(Object.entries(value));
+}
 
 test("gives the Goal objective most of the mobile details dialog", async ({ page }) => {
   await openApp(page);
@@ -266,25 +627,19 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   await expect(page.getByTestId("virtual-intermediate-items")).toHaveCount(0);
   await expect.poll(() => mountedRows.count()).toBeLessThan(30);
 
-  // Use the final row as a stable lifecycle probe. Deep estimated rows can move while WebKit
-  // replaces preceding estimates, which is expected virtualizer behavior rather than a leak.
   const commandTitle = page.getByText("large command lifecycle probe", { exact: true });
-  await expect(commandTitle).toBeVisible();
+  await expect(commandTitle).toHaveCount(0);
   await expect(page.getByText(/lifecycle-probe-output/)).toHaveCount(0);
-  const commandRow = commandTitle.locator("xpath=ancestor::*[@data-index][1]");
-  const commandRowHandle = await commandRow.elementHandle();
-  if (commandRowHandle === null) throw new Error("Expected mounted command row");
+  await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
 
-  const fileChange = page.getByRole("button", { name: /src\/large_file_/ }).first();
-  await expect(fileChange).toBeVisible();
-  // Visible file cards start expanded, but outer timeline virtualization must limit expensive
-  // highlighters to the viewport neighborhood instead of mounting all 91 file changes.
+  await expect(page.getByTestId("file-change-summary").first()).toBeVisible();
+  // Expanded intermediate steps keep the compact change summaries, but per-file cards and their
+  // expensive syntax highlighters stay unmounted.
+  await expect(page.getByRole("button", { name: /src\/large_file_/ })).toHaveCount(0);
   const mountedDiffs = page.locator(".diff-markdown .syntax-highlight");
-  await expect.poll(() => mountedDiffs.count()).toBeGreaterThan(0);
-  await expect.poll(() => mountedDiffs.count()).toBeLessThan(30);
+  await expect(mountedDiffs).toHaveCount(0);
 
-  // Move to the opposite end after capturing a real mounted node. This verifies outer timeline
-  // virtualization directly without relying on an estimated offset inside the 500-row document.
+  // Move to the opposite end to verify the compacted active timeline remains virtualized.
   if (testInfo.project.name === "mobile-webkit-core-scroll") {
     await startChatTouchScrollUp(page, 1_000_000_000);
     await endChatTouchScroll(page);
@@ -301,7 +656,6 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   await expect(page.getByText("large command lifecycle probe", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/lifecycle-probe-output/)).toHaveCount(0);
   await expect(mountedDiffs).toHaveCount(0);
-  expect(await commandRowHandle.evaluate((element) => element.isConnected)).toBe(false);
   await expect.poll(() => mountedRows.count()).toBeLessThan(30);
   const resizeObserverErrors = pageErrors.filter((message) =>
     message.includes("ResizeObserver loop"),
@@ -597,14 +951,6 @@ test("opens sidebar context actions with long press on mobile", async ({
   await page.getByTestId("mobile-sidebar-toggle").click();
   await page.getByTestId(`project-button-${project.id}`).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  await expect(page.getByTestId("open-tmux-mobile-button")).toBeVisible();
-  await expect(page.getByTestId("open-host-monitor-mobile-button")).toBeVisible();
-  await page.getByTestId("open-host-monitor-mobile-button").click();
-  await expect(page.getByTestId("host-metrics-panel")).toBeVisible();
-  await page.getByRole("tab", { name: /Agent/ }).click();
-  await page.getByTestId("open-terminal-mobile-button").click();
-  await expect(page.getByTestId("terminal-panel")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("tab", { name: /Agent/ }).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
   const threadButton = page.getByTestId(`project-thread-row-${threadId}`);
   await expect(threadButton).toBeVisible({ timeout: 30_000 });

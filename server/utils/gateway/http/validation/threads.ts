@@ -15,6 +15,7 @@ export const threadListSchema = z.object({
 export const threadOpenSchema = z.object({
   hostId: z.coerce.number().int().positive(),
   projectId: optionalPositiveInt,
+  cwd: z.string().trim().nullable().optional(),
   threadId: z.string().trim().min(1),
   limit: z.coerce.number().int().min(1).max(100).default(INITIAL_TURN_PAGE_LIMIT),
 });
@@ -41,9 +42,70 @@ export const threadRenameSchema = z.object({
   name: z.string().trim().min(1).max(200),
 });
 
+/**
+ * A host move is a controlled handoff, not a raw filesystem copy. The source remains intact;
+ * the Gateway opens it, creates a new thread on the target host, and sends a reconciliation
+ * message containing the available conversation context.
+ */
+export const threadMoveSchema = z
+  .object({
+    sourceHostId: z.coerce.number().int().positive(),
+    sourceProjectId: optionalPositiveInt,
+    sourceThreadId: z.string().trim().min(1),
+    targetHostId: z.coerce.number().int().positive(),
+    targetProjectId: optionalPositiveInt,
+    targetCwd: z.string().trim().nullable().optional(),
+  })
+  .refine((input) => input.sourceHostId !== input.targetHostId, {
+    message: "Choose a different target host",
+    path: ["targetHostId"],
+  });
+
+/** Native migration is an explicit rollout transfer and never a transcript handoff. */
+export const threadNativeMigrationSchema = z
+  .object({
+    sourceHostId: z.coerce.number().int().positive(),
+    sourceThreadId: z.string().trim().min(1),
+    sourceRolloutPath: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => value.startsWith("/"), "Source rollout path must be absolute")
+      .optional(),
+    targetHostId: z.coerce.number().int().positive(),
+    targetCwd: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => value.startsWith("/"), "Target working directory must be absolute"),
+  })
+  .refine((input) => input.sourceHostId !== input.targetHostId, {
+    message: "Choose a different target host",
+    path: ["targetHostId"],
+  });
+
+export const threadMoveReadinessSchema = z
+  .object({
+    sourceHostId: z.coerce.number().int().positive(),
+    sourceThreadId: z.string().trim().min(1),
+    targetHostId: z.coerce.number().int().positive(),
+    targetCwd: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => value.startsWith("/"), "Target working directory must be absolute"),
+  })
+  .refine((input) => input.sourceHostId !== input.targetHostId, {
+    message: "Choose a different target host",
+    path: ["targetHostId"],
+  });
+
+export const threadMovePrepareWorkspaceSchema = threadMoveReadinessSchema;
+
 export const threadSettingFields = {
   model: z.string().trim().nullable().optional(),
   effort: z.string().trim().min(1).nullable().optional(),
+  serviceTier: z.string().trim().min(1).nullable().optional(),
   approvalPolicy: z.enum(["untrusted", "on-request", "never"]).nullable().optional(),
 };
 
@@ -122,6 +184,7 @@ export const turnSteerSchema = z.object({
   expectedTurnId: z.string().trim().min(1),
   text: z.string().trim().default(""),
   clientUserMessageId: z.string().trim().nullable().optional(),
+  cwd: z.string().trim().nullable().optional(),
   images: z.array(imageInputSchema).default([]),
   references: z.array(fileReferenceSchema).max(10).default([]),
 });

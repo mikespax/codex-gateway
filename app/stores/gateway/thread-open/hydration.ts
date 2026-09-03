@@ -31,7 +31,7 @@ export function applyOpenedThreadResult(threadId: string, result: ThreadOpenResu
   );
   if (result.project !== null && result.project !== undefined)
     gateway.mergeProjects([result.project]);
-  applyCommonThreadResult(threadId, result, result.lastEventId);
+  applyCommonThreadResult(threadId, result, result.lastEventId, { preserveActivity: true });
   views.applyLiveEvents(result.recentEvents);
   syncRuntimeStatusFromResult(threadId, result, {
     thread: views.currentThread,
@@ -53,7 +53,7 @@ export function applyThreadSnapshotResult(threadId: string, result: ThreadSnapsh
   navigation.selectedThreadId = threadId;
   if (result.project !== null && result.project !== undefined)
     gateway.mergeProjects([result.project]);
-  applyCommonThreadResult(threadId, result, result.lastEventId);
+  applyCommonThreadResult(threadId, result, result.lastEventId, { preserveActivity: true });
   syncRuntimeStatusFromResult(threadId, result, {
     thread: views.currentThread,
     history: views.history,
@@ -77,6 +77,7 @@ function applyCommonThreadResult(
   threadId: string,
   result: ThreadOpenResult,
   explicitLastEventId?: number,
+  options: { preserveActivity?: boolean } = {},
 ) {
   const gateway = useGatewayCatalogStore();
   const composer = useGatewayComposerStore();
@@ -85,7 +86,7 @@ function applyCommonThreadResult(
   const views = useGatewayThreadViewStore();
   const hostId = result.hostId ?? navigation.selectedHostId;
   if (hostId === null) return;
-  useGatewayThreadActivityStore().upsertGatewayThread(result.thread, gateway.projects);
+  useGatewayThreadActivityStore().upsertGatewayThread(result.thread, gateway.projects, options);
   views.events = result.recentEvents;
   views.olderTurnsCursor = result.turnsPage.nextCursor;
   views.newerTurnsCursor = result.turnsPage.backwardsCursor;

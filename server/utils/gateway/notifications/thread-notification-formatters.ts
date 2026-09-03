@@ -1,4 +1,4 @@
-import type { GatewayEvent, ThreadGoalStatus, ThreadRuntimeStatus } from "~~/shared/types";
+import type { GatewayEvent, ThreadGoalStatus } from "~~/shared/types";
 import { terminalTurnStatus } from "~~/shared/thread-runtime-status";
 import { gatewayMemoryState } from "../state/memory";
 import { hostStore } from "../state/hosts";
@@ -12,10 +12,15 @@ export function threadTurnCompletedNotification(event: GatewayEvent): ServerNoti
   const turn = threadHistoryTurnFromUnknown(params?.turn) ?? {};
   const turnId = turn.id === null || turn.id === undefined ? `event-${event.id}` : String(turn.id);
   const status = terminalTurnStatus(turn.status);
+  // A user pressing Stop still produces app-server's terminal turn/completed event, but it is not
+  // a completion that needs a push. Keep failure and ordinary completion notifications intact.
+  if (status === "interrupted") {
+    return null;
+  }
   return {
     key: `thread-terminal:${event.hostId}:${event.threadId}:turn:${turnId}:${status}`,
-    title: `${threadTitle(event.hostId, event.threadId)} · 回合已结束`,
-    body: `${hostTitle(event.hostId)} 上的会话状态：${turnStatusLabel(status)}。可以继续输入下一步。`,
+    title: threadTitle(event.hostId, event.threadId),
+    body: "",
     group: "Codex Gateway",
     target: notificationTarget(event),
   };
@@ -29,10 +34,10 @@ export function threadGoalCompletedNotification(event: GatewayEvent): ServerNoti
   }
   return {
     key: `thread-goal:${event.hostId}:${event.threadId}:${goal.status}:${goal.updatedAt}`,
-    title: `${threadTitle(event.hostId, event.threadId)} · 目标已结束`,
+    title: `${threadTitle(event.hostId, event.threadId)} · Goal finished`,
     body: [
-      `${hostTitle(event.hostId)} 上的目标状态：${goalStatusLabel(goal.status)}。`,
-      `推进 ${formatDuration(goal.timeUsedSeconds)}，使用 ${goal.tokensUsed.toLocaleString()} tokens。`,
+      `${hostTitle(event.hostId)} goal status: ${goalStatusLabel(goal.status)}. `,
+      `Ran for ${formatDuration(goal.timeUsedSeconds)} and used ${goal.tokensUsed.toLocaleString("en-US")} tokens.`,
     ].join(""),
     group: "Codex Gateway",
     target: notificationTarget(event),
@@ -50,14 +55,14 @@ export function threadUserInputRequestedNotification(event: GatewayEvent): Serve
   // itemId belongs to the thread history and survives app-server restarts. Numeric RPC ids restart
   // from zero with each process, so they are only a fallback when older payloads omit itemId.
   const requestId = idFromUnknown(params?.itemId) ?? idFromUnknown(event.payload.id) ?? event.id;
-  const questionCount = questions.length > 1 ? `（共 ${questions.length} 个问题）` : "";
+  const questionCount = questions.length > 1 ? ` (${questions.length} questions)` : "";
 
   return {
     key: `thread-user-input:${event.hostId}:${event.threadId}:${requestId}`,
-    title: `${threadTitle(event.hostId, event.threadId)} · 等待回答`,
+    title: `${threadTitle(event.hostId, event.threadId)} · Awaiting your response`,
     // Options may contain secrets or large model-generated payloads. A push notification only
     // needs enough context to bring the user back; the interactive card remains authoritative.
-    body: `${hostTitle(event.hostId)} 上的 Agent 正在等待你的回答${questionCount}：${question ?? "请打开会话查看问题。"}`,
+    body: `${hostTitle(event.hostId)} Agent is waiting for your response${questionCount}: ${question ?? "Open the thread to view the question."}`,
     group: "Codex Gateway",
     target: notificationTarget(event),
   };
@@ -103,25 +108,14 @@ function hostTitle(hostId: number) {
   return firstNonEmptyString([hostStore.get(hostId)?.name]) ?? `Host ${hostId}`;
 }
 
-function turnStatusLabel(status: ThreadRuntimeStatus) {
-  const labels: Record<ThreadRuntimeStatus, string> = {
-    idle: "空闲",
-    running: "运行中",
-    completed: "已完成",
-    failed: "失败",
-    interrupted: "已中断",
-  };
-  return labels[status];
-}
-
 function goalStatusLabel(status: ThreadGoalStatus) {
   const labels: Record<ThreadGoalStatus, string> = {
-    active: "推进中",
-    paused: "已暂停",
-    blocked: "已阻塞",
-    usageLimited: "用量受限",
-    budgetLimited: "预算已用尽",
-    complete: "已完成",
+    active: "active",
+    paused: "paused",
+    blocked: "blocked",
+    usageLimited: "usage limited",
+    budgetLimited: "budget exhausted",
+    complete: "completed",
   };
   return labels[status];
 }

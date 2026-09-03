@@ -69,6 +69,10 @@ export function useComposerController() {
       // Existing-thread settings are projected from thread/resume instead of inferred here.
       model: settings.selectedModel.value === "" ? undefined : settings.selectedModel.value,
       effort,
+      serviceTier:
+        settings.selectedServiceTier.value === "default"
+          ? undefined
+          : settings.selectedServiceTier.value,
       approvalPolicy:
         settings.selectedApprovalMode.value === "custom"
           ? undefined
@@ -99,6 +103,7 @@ export function useComposerController() {
     () =>
       selectedThreadId.value !== null && isThreadRunning.value && !submit.hasComposerInput.value,
   );
+  const canStopTurn = computed(() => selectedThreadId.value !== null && isThreadRunning.value);
   const canUsePrimaryAction = computed(() =>
     Boolean(
       (canSendTurn.value || canInterruptTurn.value) && !attachmentUpload.uploadingAttachments.value,
@@ -143,14 +148,21 @@ export function useComposerController() {
     if (slashCommandsState.handleKeydown(event)) {
       return;
     }
-    if (event.key !== "Enter" || event.shiftKey) {
-      return;
+    // Desktop keyboard users expect Enter to submit. Preserve mobile's multiline editor so the
+    // software keyboard cannot accidentally send a half-written message; Shift+Enter is the
+    // explicit desktop newline shortcut.
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      window.matchMedia("(min-width: 48rem)").matches &&
+      canSendTurn.value
+    ) {
+      event.preventDefault();
+      void submitComposer();
     }
-    event.preventDefault();
-    if (selectedThreadId.value === null) {
-      return;
-    }
-    void submitComposer();
   }
 
   function handlePrimaryAction() {
@@ -186,6 +198,7 @@ export function useComposerController() {
     uploadingAttachments: attachmentUpload.uploadingAttachments,
     handleAttachmentChange: attachmentUpload.handleAttachmentChange,
     handlePaste: attachmentUpload.handlePaste,
+    handleDrop: attachmentUpload.handleDrop,
     removeAttachment: attachmentUpload.removeAttachment,
     openAttachmentPicker: attachmentUpload.openAttachmentPicker,
     planModeActive: submit.planModeActive,
@@ -199,6 +212,7 @@ export function useComposerController() {
     selectedThreadTokenUsage,
     isThreadRunning,
     canInterruptTurn,
+    canStopTurn,
     canUsePrimaryAction,
     sendButtonLabel,
     slashMenuOpen: slashCommandsState.menuOpen,
@@ -208,6 +222,7 @@ export function useComposerController() {
     runSlashCommand: slashActions.runSlashCommand,
     handleComposerKeydown,
     handlePrimaryAction,
+    interruptTurn: submit.interruptTurn,
     handleFileReferenceLimit,
     models,
     loadingModels,

@@ -11,7 +11,7 @@ export function buildHostMetricsSample(
   return {
     sampledAt: new Date(current.sampledAtMs).toISOString(),
     cpu: {
-      usagePercent: cpuUsage(current, previous),
+      usagePercent: current.cpu.directUsagePercent ?? cpuUsage(current, previous),
       loadAverage: current.loadAverage,
     },
     memory: {

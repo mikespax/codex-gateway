@@ -7,6 +7,7 @@ import { useGatewayComposerStore } from "@/stores/gateway-composer";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { buildThreadCollaborationMode } from "@/utils/thread-collaboration-mode";
+import { remoteTurnFileInputs } from "./attachment-turn-input";
 
 type AttachedFile = {
   name: string;
@@ -57,7 +58,7 @@ export function useComposerTurnSubmit(input: {
       composer.dismissLatestSelectedPlanPrompt();
     }
     const files = [...input.attachedFiles.value];
-    const remoteFiles = files.filter((file) => !file.isImage);
+    const remoteFiles = remoteTurnFileInputs(files);
     const attachedImages = files.filter((file) => file.isImage);
     const references = input.fileReferences.value.map(({ type, path, name }) => ({
       type,

@@ -9,7 +9,8 @@ import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity"
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
-import type { ThreadGoalStatus } from "~~/shared/types";
+import type { ServerNotification, ThreadGoalStatus } from "~~/shared/types";
+import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
 
 export type GoalControlCapture = { type: "status"; status: ThreadGoalStatus } | { type: "clear" };
 
@@ -30,6 +31,7 @@ export interface GatewayE2eTestDriver {
   activity: ReturnType<typeof useGatewayThreadActivityStore>;
   turns: ReturnType<typeof useGatewayThreadTurnsStore>;
   views: ReturnType<typeof useGatewayThreadViewStore>;
+  publishNotification: (notification: ServerNotification) => void;
 }
 
 function createGatewayE2eTestDriver(): GatewayE2eTestDriver {
@@ -48,6 +50,12 @@ function createGatewayE2eTestDriver(): GatewayE2eTestDriver {
     activity: useGatewayThreadActivityStore(),
     turns: useGatewayThreadTurnsStore(),
     views: useGatewayThreadViewStore(),
+    publishNotification(notification) {
+      gatewayDomainEvents.emit("realtime-notification-published", {
+        notification,
+        actionLabel: "Open thread",
+      });
+    },
   };
 }
 

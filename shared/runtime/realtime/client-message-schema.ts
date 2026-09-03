@@ -17,7 +17,7 @@ const imageInput = z
     detail: z.enum(["low", "high", "auto", "original"]).optional(),
   })
   .strict();
-const fileInput = z
+const strictFileInput = z
   .object({
     path: z.string(),
     name: z.string(),
@@ -26,6 +26,17 @@ const fileInput = z
     isImage: z.boolean(),
   })
   .strict();
+const fileInput = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+
+  // Compatibility for browser tabs opened before composer attachment payloads were projected to
+  // wire-only fields. Keep the trust boundary strict for every other unknown property.
+  const wireValue: Record<string, unknown> = {};
+  for (const [key, property] of Object.entries(value)) {
+    if (key !== "id") wireValue[key] = property;
+  }
+  return wireValue;
+}, strictFileInput);
 const collaborationMode = z
   .object({
     mode: z.enum(["default", "plan"]),
@@ -67,6 +78,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         ...requestIdField,
         ...threadScopeFields,
         projectId: positiveId.nullable().optional(),
+        cwd: nullableString,
         limit: positiveId.optional(),
       })
       .strict(),
@@ -98,6 +110,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         cwd: nullableString,
         model: nullableString,
         effort: nullableString,
+        serviceTier: nullableString,
         approvalPolicy,
       })
       .strict(),
@@ -112,6 +125,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         cwd: nullableString,
         model: nullableString,
         effort: nullableString,
+        serviceTier: nullableString,
         approvalPolicy,
         collaborationMode,
         images: z.array(imageInput).optional(),
@@ -139,6 +153,7 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         expectedTurnId: nonEmptyString,
         text: z.string(),
         clientUserMessageId: nullableString,
+        cwd: nullableString,
         images: z.array(imageInput).optional(),
         references: z
           .array(

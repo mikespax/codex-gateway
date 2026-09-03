@@ -1,4 +1,8 @@
-import type { ComposerTurnOptions } from "~~/shared/types";
+import type {
+  ComposerTurnOptions,
+  ProjectDirectoryAvailability,
+  ProjectRecord,
+} from "~~/shared/types";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
@@ -6,8 +10,17 @@ import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
-import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
-import { requestScrollToLatest } from "@/stores/gateway/thread-open/view-state";
+import {
+  errorMessageLabels,
+  messageFromError,
+  pinnedKey,
+} from "@/stores/gateway/thread-utils/identity";
+import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity";
+import {
+  cacheSelectedThreadView,
+  requestScrollToLatest,
+  syncSelectedRoute,
+} from "@/stores/gateway/thread-open/view-state";
 import {
   createClientUserMessageId,
   optimisticUserContent,
@@ -36,7 +49,40 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
   if (hostId === null || threadId === null) {
     return;
   }
+  const targetIsSelected = () =>
+    navigation.selectedHostId === hostId && navigation.selectedThreadId === threadId;
+  cacheSelectedThreadView();
 
+  const selectedProjectId = navigation.selectedProjectId;
+  const resolveCurrentProject = () =>
+    resolveTurnProject({
+      projects: catalog.projects,
+      availability: catalog.projectDirectoryAvailability,
+      hostId,
+      hostUsername: catalog.hosts.find((host) => host.id === hostId)?.username ?? null,
+      selectedProjectId,
+      threadCwd: useGatewayThreadActivityStore().summariesByKey[pinnedKey(hostId, threadId)]?.cwd,
+    });
+  let project = resolveCurrentProject();
+  if (project === undefined) {
+    // A route can select a thread before background host discovery has populated the project
+    // catalog. Treat the first submit as a readiness boundary instead of rejecting it and forcing
+    // the user to send the same message again after hydration happens to finish.
+    await navigation.refreshHostProjects(hostId);
+    if (!sessionIsCurrent()) return;
+    project = resolveCurrentProject();
+  }
+  if (project === undefined) {
+    gateway.setError(t("app.projectRequiredForFileReferences"), { hostId, threadId });
+    return;
+  }
+  const projectId = project.id;
+  // Heal stale route/cache state so later actions cannot keep submitting a foreign host project.
+  if (targetIsSelected() && navigation.selectedProjectId !== projectId) {
+    navigation.selectedProjectId = projectId;
+    syncSelectedRoute({ replace: true });
+  }
+  const cwd = project.remotePath;
   const runtime = runtimeStore.threadRuntimeProjection(hostId, threadId);
   const steerTurnId = runtime.canSteer ? runtime.activeTurnId : null;
   const shouldSteerActiveTurn = steerTurnId !== null;
@@ -49,21 +95,20 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
   // or restored layout left the strict two-pixel end detector detached. Issue the command before
   // the optimistic append; the viewport consumes it after Vue commits that row and uses TanStack's
   // public scrollToEnd transaction instead of writing scrollTop directly.
-  requestScrollToLatest();
+  if (targetIsSelected()) requestScrollToLatest();
   const optimisticContent = optimisticUserContent(text, options);
   if (steerTurnId !== null) {
-    insertOptimisticSteerMessage(threadId, steerTurnId, clientUserMessageId, optimisticContent);
+    insertOptimisticSteerMessage(
+      hostId,
+      threadId,
+      steerTurnId,
+      clientUserMessageId,
+      optimisticContent,
+    );
   } else {
-    insertOptimisticNewTurnMessage(threadId, clientUserMessageId, optimisticContent);
+    insertOptimisticNewTurnMessage(hostId, threadId, clientUserMessageId, optimisticContent);
   }
 
-  const projectId = navigation.selectedProjectId;
-  if (projectId === null) {
-    gateway.setError(t("app.projectRequiredForFileReferences"), { hostId, threadId });
-    if (!shouldSteerActiveTurn) runtimeStore.setThreadStatus(hostId, threadId, "completed");
-    return;
-  }
-  const cwd = catalog.projects.find((project) => project.id === projectId)?.remotePath ?? null;
   const requestKind = shouldSteerActiveTurn ? "steer" : "start";
   const executeTurnRequest =
     steerTurnId !== null
@@ -75,6 +120,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
             expectedTurnId: steerTurnId,
             text,
             clientUserMessageId,
+            cwd,
             options,
           })
       : () =>
@@ -88,7 +134,7 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
             options,
           });
 
-  views.loading = true;
+  if (targetIsSelected()) views.loading = true;
   gateway.clearError();
   try {
     const result = await runTurnRequestWithAutoRetry<TurnRequestResult>(
@@ -99,9 +145,10 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
     if (!sessionIsCurrent()) return;
     applyAcceptedTurnResult(hostId, threadId, result, clientUserMessageId, optimisticContent);
     if (!shouldSteerActiveTurn) {
-      composer.updateSelectedThreadSettings({
+      composer.setThreadSettings(hostId, threadId, {
         ...(options.model !== undefined ? { model: options.model } : {}),
         ...(options.effort !== undefined ? { effort: options.effort } : {}),
+        ...(options.serviceTier !== undefined ? { serviceTier: options.serviceTier } : {}),
         ...(options.approvalPolicy !== undefined ? { approvalPolicy: options.approvalPolicy } : {}),
       });
     }
@@ -117,8 +164,49 @@ export async function sendTurn(t: Translate, text: string, options: ComposerTurn
       runtimeStore.setThreadStatus(hostId, threadId, "completed");
     }
   } finally {
-    if (sessionIsCurrent()) views.loading = false;
+    if (sessionIsCurrent() && targetIsSelected()) views.loading = false;
   }
+}
+
+function resolveTurnProject(input: {
+  projects: ProjectRecord[];
+  availability: Record<number, ProjectDirectoryAvailability>;
+  hostId: number;
+  hostUsername: string | null;
+  selectedProjectId: number | null;
+  threadCwd: string | null | undefined;
+}) {
+  const hostProjects = input.projects.filter((project) => project.hostId === input.hostId);
+  const isUsable = (project: ProjectRecord) => input.availability[project.id] !== "missing";
+  const selected = hostProjects.find(
+    (project) => project.id === input.selectedProjectId && isUsable(project),
+  );
+  if (selected !== undefined) return selected;
+
+  const matchingCwd = hostProjects.find(
+    (project) => project.remotePath === input.threadCwd && isUsable(project),
+  );
+  if (matchingCwd !== undefined) return matchingCwd;
+
+  return hostProjects
+    .filter((project) => input.availability[project.id] === "available")
+    .sort(
+      (left, right) =>
+        fallbackProjectRank(left, input.hostUsername) -
+          fallbackProjectRank(right, input.hostUsername) || left.id - right.id,
+    )[0];
+}
+
+function fallbackProjectRank(project: ProjectRecord, username: string | null) {
+  const homePaths =
+    username === null
+      ? []
+      : username === "root"
+        ? ["/root"]
+        : [`/Users/${username}`, `/home/${username}`];
+  if (homePaths.includes(project.remotePath)) return 0;
+  if (project.remotePath.endsWith("/.codex")) return 1;
+  return 10 + project.remotePath.split("/").filter(Boolean).length;
 }
 
 function applyAcceptedTurnResult(
@@ -135,7 +223,7 @@ function applyAcceptedTurnResult(
     if (startedTurnId !== "" && !startedTurnId.startsWith("client-")) {
       runtime.setThreadStatus(hostId, threadId, "running", { turnId: startedTurnId });
     }
-    mergeStartedTurn(threadId, result.turn);
+    mergeStartedTurn(hostId, threadId, result.turn);
   }
   if (
     result?.type === "turn.start.accepted" &&
@@ -143,13 +231,19 @@ function applyAcceptedTurnResult(
     result.turn?.items !== undefined &&
     result.turn.items.length > 0
   ) {
-    mergeTurnItems(threadId, result.turn);
+    mergeTurnItems(hostId, threadId, result.turn);
   }
   if (
     result?.type === "turn.steer.accepted" &&
     result.turnId !== undefined &&
     result.turnId !== ""
   ) {
-    insertOptimisticSteerMessage(threadId, result.turnId, clientUserMessageId, optimisticContent);
+    insertOptimisticSteerMessage(
+      hostId,
+      threadId,
+      result.turnId,
+      clientUserMessageId,
+      optimisticContent,
+    );
   }
 }

@@ -15,6 +15,10 @@
     "typecheck": "nuxt typecheck && vue-tsc -p tests/e2e/tsconfig.json --noEmit",
     "typecheck:dependencies": "pnpm --filter '@codex-gateway/*' --recursive typecheck",
     "user:create": "node scripts/create-user.mjs",
+    "supervisor:grant": "node scripts/create-supervisor-grant.mjs",
+    "supervisor:revoke": "node scripts/revoke-supervisor-grant.mjs",
+    "supervisor:read": "node scripts/read-supervisor-thread.mjs",
+    "supervisor:send": "node scripts/send-supervisor-message.mjs",
     "test:e2e": "tests/e2e/run-in-containers.sh",
     "postinstall": "pnpm build:dependencies && pnpm typecheck:dependencies && nuxt prepare"
   },
@@ -74,6 +78,7 @@
     "ensure-error": "^5.0.0",
     "fuse.js": "^7.5.0",
     "h3": "1.15.11",
+    "idb": "^8.0.3",
     "isbinaryfile": "^6.0.0",
     "klona": "^2.0.6",
     "media-chrome": "^4.19.2",

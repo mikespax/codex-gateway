@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { createMarkdownRenderer } from "@codex-gateway/browser-runtime/markdown";
-import { useEventListener } from "@vueuse/core";
+import { toast } from "@codex-gateway/ui/sonner";
+import { useClipboard, useEventListener } from "@vueuse/core";
 import { computed, ref } from "vue";
 import { parseRemoteFileLink } from "@/utils/file-preview-links";
-import { escapeHtml, highlightCode, normalizeLanguage } from "@/utils/code-highlight";
+import {
+  escapeAttribute,
+  escapeHtml,
+  highlightCode,
+  normalizeLanguage,
+} from "@/utils/code-highlight";
 import { useFilePreviewContext } from "@/composables/files/useFilePreviewContext";
 import { useGatewayFileWorkspaceStore } from "@/stores/file-workspace";
 import { useStreamRenderScheduler } from "@/composables/rendering/useStreamRenderScheduler";
@@ -23,6 +29,8 @@ const props = withDefaults(
 );
 
 const markdown = createMarkdownRenderer();
+const { t } = useI18n();
+const { copy, isSupported: clipboardSupported } = useClipboard();
 
 const root = ref<HTMLElement | null>(null);
 const filePreviewContext = useFilePreviewContext();
@@ -38,17 +46,27 @@ const markdownScheduler = useStreamRenderScheduler({
 const rendered = computed(() => markdownScheduler.output.value || "");
 
 function renderMarkdownImmediately(content: string) {
-  return markdown.render(content);
+  return decorateCodeBlocks(markdown.render(content));
 }
 
 async function renderMarkdownEnhanced(content: string, diffLanguage: string) {
-  return await markdown.renderEnhanced(content, async (fence) => {
+  const html = await markdown.renderEnhanced(content, async (fence) => {
     const normalizedLanguage = normalizeLanguage(fence.language);
     if (normalizedLanguage === "diff") {
       return `<pre class="syntax-highlight language-diff"><code>${await renderDiff(fence.content, diffLanguage)}</code></pre>`;
     }
     return `<pre class="shiki-block syntax-highlight language-${normalizeLanguage(normalizedLanguage || "text")}"><code>${await highlightCode(fence.content, normalizedLanguage)}</code></pre>`;
   });
+  return decorateCodeBlocks(html);
+}
+
+function decorateCodeBlocks(html: string) {
+  const copyLabel = escapeAttribute(t("app.copyCode"));
+  return html.replace(
+    /<pre\b[\s\S]*?<\/pre>/g,
+    (codeBlock) =>
+      `<div class="markdown-code-block">${codeBlock}<div class="markdown-code-actions"><button data-markdown-code-copy data-testid="copy-markdown-code-button" type="button" aria-label="${copyLabel}" title="${copyLabel}">${copyLabel}</button></div></div>`,
+  );
 }
 
 async function renderDiff(value: string, language: string) {
@@ -111,7 +129,17 @@ function diffLineClass(line: string) {
 }
 
 function handleClick(event: MouseEvent) {
-  const anchor = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+  const clickedElement = event.target as Element | null;
+  const copyButton = clickedElement?.closest?.(
+    "button[data-markdown-code-copy]",
+  ) as HTMLButtonElement | null;
+  if (copyButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    void copyMarkdownCode(copyButton);
+    return;
+  }
+  const anchor = clickedElement?.closest?.("a[href]") as HTMLAnchorElement | null;
   if (!anchor || !filePreviewContext) {
     return;
   }
@@ -132,6 +160,25 @@ function handleClick(event: MouseEvent) {
     path: target.path,
     line: target.line,
   });
+}
+
+async function copyMarkdownCode(button: HTMLButtonElement) {
+  const code = button.closest(".markdown-code-block")?.querySelector("pre code")?.textContent;
+  if (!code || !clipboardSupported.value) {
+    toast.error(t("app.copyCodeFailed"));
+    return;
+  }
+  try {
+    await copy(code);
+    const originalLabel = t("app.copyCode");
+    button.textContent = t("app.codeCopied");
+    toast.success(t("app.codeCopied"));
+    window.setTimeout(() => {
+      if (button.isConnected) button.textContent = originalLabel;
+    }, 1200);
+  } catch {
+    toast.error(t("app.copyCodeFailed"));
+  }
 }
 
 useEventListener(root, "click", handleClick);

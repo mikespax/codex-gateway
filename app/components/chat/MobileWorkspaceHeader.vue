@@ -1,77 +1,52 @@
 <script setup lang="ts">
-import { ActivityIcon, ChartNoAxesCombinedIcon, GlobeIcon, TerminalIcon } from "@lucide/vue";
+import { MinusIcon, PlusIcon } from "@lucide/vue";
+import { storeToRefs } from "pinia";
 import { Button } from "@codex-gateway/ui/button";
+import CodexUsageBadge from "@/components/chat/CodexUsageBadge.vue";
+import { useGatewayAppearanceStore } from "@/stores/gateway-appearance";
 
 defineProps<{
-  canOpenTerminal: boolean;
-  tmuxActiveCount: number;
+  hostId: number | null;
 }>();
 
-const emit = defineEmits<{
-  openTerminal: [];
-  openBrowser: [];
-  openTmux: [];
-  openHostMonitor: [];
-}>();
+const appearance = useGatewayAppearanceStore();
+const { canDecreaseChatTextSize, canIncreaseChatTextSize } = storeToRefs(appearance);
 </script>
 
 <template>
   <header
     class="flex min-h-14 shrink-0 items-center gap-2 border-b border-hairline bg-surface/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur"
   >
-    <div class="flex min-w-0 basis-[34vw] flex-none items-center gap-2 overflow-hidden">
+    <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
       <slot name="start" />
     </div>
-    <div class="relative z-10 ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+    <div class="relative z-10 ml-auto flex shrink-0 items-center justify-end gap-1">
+      <CodexUsageBadge :host-id="hostId" />
       <Button
-        data-testid="open-tmux-mobile-button"
+        data-testid="decrease-chat-text-size"
+        type="button"
         variant="ghost"
         size="sm"
-        class="relative h-8 shrink-0 rounded-md px-2 text-ink-muted hover:bg-canvas-soft hover:text-ink"
-        :disabled="!canOpenTerminal"
-        :aria-label="$t('app.openTmuxMonitor')"
-        @click="emit('openTmux')"
+        class="size-8 shrink-0 rounded-md p-0 text-ink-muted hover:bg-canvas-soft hover:text-ink"
+        :disabled="!canDecreaseChatTextSize"
+        :aria-label="$t('app.decreaseChatTextSize')"
+        :title="$t('app.decreaseChatTextSize')"
+        @click="appearance.decreaseChatTextSize"
       >
-        <ActivityIcon class="size-4" />
-        <span
-          v-if="tmuxActiveCount"
-          class="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold leading-4 text-primary-foreground"
-        >
-          {{ tmuxActiveCount }}
-        </span>
+        <MinusIcon class="size-4" />
       </Button>
       <Button
-        data-testid="open-host-monitor-mobile-button"
+        data-testid="increase-chat-text-size"
+        type="button"
         variant="ghost"
         size="sm"
-        class="h-8 shrink-0 rounded-md px-2 text-ink-muted hover:bg-canvas-soft hover:text-ink"
-        :disabled="!canOpenTerminal"
-        :aria-label="$t('app.openHostMonitor')"
-        @click="emit('openHostMonitor')"
+        class="size-8 shrink-0 rounded-md p-0 text-ink-muted hover:bg-canvas-soft hover:text-ink"
+        :disabled="!canIncreaseChatTextSize"
+        :aria-label="$t('app.increaseChatTextSize')"
+        :title="$t('app.increaseChatTextSize')"
+        @click="appearance.increaseChatTextSize"
       >
-        <ChartNoAxesCombinedIcon class="size-4" />
-      </Button>
-      <Button
-        data-testid="open-browser-mobile-button"
-        variant="ghost"
-        size="sm"
-        class="h-8 shrink-0 rounded-md px-2 text-ink-muted hover:bg-canvas-soft hover:text-ink"
-        :disabled="!canOpenTerminal"
-        :aria-label="$t('app.openBrowser')"
-        @click="emit('openBrowser')"
-      >
-        <GlobeIcon class="size-4" />
-      </Button>
-      <Button
-        data-testid="open-terminal-mobile-button"
-        variant="ghost"
-        size="sm"
-        class="h-8 shrink-0 rounded-md px-2 text-ink-muted hover:bg-canvas-soft hover:text-ink"
-        :disabled="!canOpenTerminal"
-        :aria-label="$t('app.openTerminal')"
-        @click="emit('openTerminal')"
-      >
-        <TerminalIcon class="size-4" />
+        <PlusIcon class="size-4" />
       </Button>
     </div>
   </header>

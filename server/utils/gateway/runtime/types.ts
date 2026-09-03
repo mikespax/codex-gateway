@@ -40,6 +40,7 @@ export interface TurnStartInput {
   clientUserMessageId?: string | null;
   model?: string | null;
   effort?: ReasoningEffort | null;
+  serviceTier?: string | null;
   approvalPolicy?: ApprovalPolicy | null;
   collaborationMode?: ThreadCollaborationMode | null;
   images?: Array<{

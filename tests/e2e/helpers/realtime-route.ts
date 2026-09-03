@@ -40,6 +40,7 @@ interface RealtimeRouteState {
   interruptRequest: Extract<RealtimeClientMessage, { type: "turn.interrupt" }> | null;
   serverRequestResponse: ServerRequestResponseRouteState | null;
   threadTurnsLoad: ThreadTurnsLoadRouteState | null;
+  turnStart: TurnStartRouteState | null;
 }
 
 interface RealtimeRouteConnection {
@@ -63,6 +64,14 @@ interface ThreadTurnsLoadRouteState {
   response: Extract<RealtimeServerMessage, { type: "thread.turns.page" }>;
 }
 
+interface TurnStartRouteState {
+  requests: Array<{
+    connection: RealtimeRouteConnection;
+    message: Extract<RealtimeClientMessage, { type: "turn.start" }>;
+  }>;
+  turn: unknown;
+}
+
 type ThreadTurnsLoadResponseInput = Omit<
   Extract<RealtimeServerMessage, { type: "thread.turns.page" }>,
   "history"
@@ -80,6 +89,7 @@ export async function installRealtimeRoute(page: Page) {
     interruptRequest: null,
     serverRequestResponse: null,
     threadTurnsLoad: null,
+    turnStart: null,
   };
   routes.set(page, state);
   await page.routeWebSocket(/\/api\/realtime$/, (route) => {
@@ -148,6 +158,31 @@ export function realtimeThreadTurnsLoadRequests(page: Page) {
   return (routes.get(page)?.threadTurnsLoad?.requests ?? []).map(({ message }) => message);
 }
 
+export function installDeferredRealtimeTurnStartRoute(page: Page, turn: unknown) {
+  const state = requireRealtimeRoute(page);
+  state.turnStart = { requests: [], turn };
+}
+
+export function deferredRealtimeTurnStartRequests(page: Page) {
+  return (routes.get(page)?.turnStart?.requests ?? []).map(({ message }) => message);
+}
+
+export function releaseDeferredRealtimeTurnStartRoute(page: Page) {
+  const state = requireRealtimeRoute(page);
+  const route = state.turnStart;
+  if (route === null) throw new Error("No deferred turn start route is installed");
+  for (const request of route.requests) {
+    send(request.connection, {
+      type: "turn.start.accepted",
+      requestId: request.message.requestId,
+      hostId: request.message.hostId,
+      threadId: request.message.threadId,
+      turn: route.turn,
+    });
+  }
+  route.requests = [];
+}
+
 export function realtimeThreadActivateRequests(page: Page) {
   return [...(routes.get(page)?.activateRequests ?? [])];
 }
@@ -180,6 +215,10 @@ function handleClientMessage(
     state.threadTurnsLoad.requests.push({ connection, message });
     if (!state.threadTurnsLoad.deferred)
       sendThreadTurnsPage(connection, state.threadTurnsLoad.response, message);
+    return;
+  }
+  if (message.type === "turn.start" && state.turnStart !== null) {
+    state.turnStart.requests.push({ connection, message });
     return;
   }
   connection.upstream.send(raw);

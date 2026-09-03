@@ -8,6 +8,9 @@ export const OLDER_TURN_PAGE_LIMIT = 5;
 export const SERVER_TURN_CACHE_LIMIT = 50;
 export const SERVER_THREAD_CACHE_LIMIT = 100;
 export const CLIENT_THREAD_CACHE_LIMIT = 24;
+export const PERSISTENT_THREAD_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+export const PERSISTENT_THREAD_SNAPSHOT_MAX_BYTES = 2 * 1_024 * 1_024;
+export const PERSISTENT_THREAD_VIEW_MAX_BYTES = 2 * 1_024 * 1_024;
 export const DEFAULT_BARK_SERVER_URL = "https://api.day.app";
 export const DEFAULT_BARK_GROUP = "Codex Gateway";
 

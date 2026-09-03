@@ -59,13 +59,14 @@ export async function activateThread(
       input.projectId ?? null,
       input.limit,
       activationController,
+      input.cwd,
+      lastEventId,
     );
     sendRealtimePeerMessage(peer, {
       type: "thread.snapshot",
       requestId: message.requestId,
       hostId: input.hostId,
       threadId: input.threadId,
-      lastEventId,
       eventEpoch,
       ...result,
     });
@@ -73,7 +74,7 @@ export async function activateThread(
       peer,
       host,
       input.threadId,
-      lastEventId,
+      result.lastEventId,
       eventEpoch,
       result.runtimeStatus === "running",
       { lease: activationLease, controller: activationController },
@@ -110,6 +111,7 @@ export async function startThread(
       cwd: input.cwd === "" ? undefined : input.cwd,
       model: input.model === "" ? undefined : input.model,
       effort: input.effort === "" ? undefined : input.effort,
+      serviceTier: input.serviceTier === "" ? undefined : input.serviceTier,
       approvalPolicy: input.approvalPolicy ?? undefined,
     },
     input.projectId ?? null,

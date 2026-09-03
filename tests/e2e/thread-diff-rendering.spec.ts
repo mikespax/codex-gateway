@@ -1,13 +1,31 @@
 import { expect, test } from "@playwright/test";
 import { openApp } from "./helpers/app";
-import { appendFileDiffLines, seedGatewayThread } from "./helpers/gateway-store";
-import { diffScrollLeft, setDiffScrollLeft } from "./helpers/scroll";
+import { seedGatewayThread } from "./helpers/gateway-store";
 import type { ThreadHistoryState } from "../../shared/types";
 import type { ThreadViewState } from "../../app/stores/gateway/types";
 import { projectThreadTimelineHistory } from "../../shared/thread-history/timeline";
 import { gatewayThreadFixture } from "./fixtures/gateway-thread";
+import { compactCompletedFileChangeRuns } from "../../app/components/thread/completed-file-change-runs";
 
-test("file diff blocks can collapse and expand after virtual timeline measurement", async ({
+test("compacts consecutive completed file-change steps into one summary", () => {
+  const items = [3, 1, 2, 2, 1, 1].map((count, index) => ({
+    id: `file-change-${index}`,
+    type: "fileChange" as const,
+    status: "completed",
+    changes: Array.from({ length: count }, (_, changeIndex) => ({
+      path: `/tmp/file-${index}-${changeIndex}.txt`,
+      kind: "update",
+    })),
+  }));
+
+  const compacted = compactCompletedFileChangeRuns(items);
+  expect(compacted).toHaveLength(1);
+  expect(compacted[0]?.type).toBe("fileChange");
+  expect(compacted[0]?.changes).toHaveLength(10);
+  expect(compacted[0]?.aggregatedStepCount).toBe(6);
+});
+
+test("expanded intermediate steps keep file summaries but hide code-change details", async ({
   page,
 }) => {
   await openApp(page);
@@ -57,42 +75,20 @@ test("file diff blocks can collapse and expand after virtual timeline measuremen
   });
 
   await openIntermediateSteps(page);
-  const toggle = page.getByRole("button", { name: /src\/example\.py/ });
-  const diffText = page.getByText("new_value =");
-  await expect(toggle.locator("span[title]")).toHaveAttribute("title", changedFilePath);
-  await expect(toggle).toHaveAttribute("data-state", "open");
-  await expect(diffText).toBeVisible();
-  await expect
-    .poll(async () => (await page.locator(".diff-markdown").first().boundingBox())?.height ?? 0)
-    .toBeGreaterThan(24);
-
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("data-state", "closed");
-  await expect(diffText).toBeHidden();
-
-  await appendFileDiffLines(page, {
-    itemId: "file-change-1",
-    path: changedFilePath,
-    prefix: "streamed while manually collapsed",
-    count: 2,
-  });
-  await expect(toggle).toHaveAttribute("data-state", "closed");
-  await expect(page.getByText("streamed while manually collapsed 001")).toHaveCount(0);
-
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("data-state", "open");
-  await expect(diffText).toBeVisible();
-  await expect(page.getByText("streamed while manually collapsed 001")).toBeVisible();
+  await expect(page.getByTestId("file-change-summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: /src\/example\.py/ })).toHaveCount(0);
+  await expect(page.getByText("new_value =")).toHaveCount(0);
+  await expect(page.locator(".diff-markdown")).toHaveCount(0);
 });
 
-test("command labels unwrap official shell invocations and short output uses natural height", async ({
+test("active routine commands and empty reasoning collapse into one working row", async ({
   page,
 }) => {
   await openApp(page);
-  const threadId = "e2e-short-command-output-thread";
+  const threadId = "e2e-compact-live-work-thread";
   await seedGatewayThread(page, {
     threadId,
-    currentThread: { id: threadId, name: "Short Command Output" },
+    currentThread: { id: threadId, name: "Compact Live Work" },
     history: {
       thread: {
         id: threadId,
@@ -100,13 +96,24 @@ test("command labels unwrap official shell invocations and short output uses nat
           {
             id: "turn-short-command",
             status: "running",
+            startedAt: Math.floor(Date.now() / 1000) - 5,
             items: [
+              {
+                id: "agent-progress-1",
+                type: "agentMessage",
+                text: "I am checking the relevant files now.",
+              },
               {
                 id: "command-short-1",
                 type: "commandExecution",
                 status: "completed",
                 command: "/bin/zsh -lc 'pwd && printf \"done\"'",
                 aggregatedOutput: "/tmp/e2e\n",
+              },
+              {
+                id: "reasoning-empty-1",
+                type: "reasoning",
+                status: "completed",
               },
               {
                 id: "command-plain-1",
@@ -116,12 +123,15 @@ test("command labels unwrap official shell invocations and short output uses nat
                 aggregatedOutput: "",
               },
               {
-                id: "command-failed-1",
+                id: "command-approval-1",
                 type: "commandExecution",
-                status: "failed",
-                command: "false",
-                aggregatedOutput: "",
-                exitCode: 1,
+                status: "inProgress",
+                command: "deploy production",
+                pendingApproval: {
+                  requestId: "approval-1",
+                  method: "item/commandExecution/requestApproval",
+                  params: { reason: "Production permission is required" },
+                },
               },
             ],
           },
@@ -131,64 +141,70 @@ test("command labels unwrap official shell invocations and short output uses nat
   });
 
   await openIntermediateSteps(page);
-  await expect(page.getByRole("button", { name: /pwd && printf "done"/ })).toBeVisible();
-  const completedCommand = page.getByRole("button", { name: /pwd && printf "done"/ });
-  const runningCommand = page.getByRole("button", { name: /sleep 10/ });
-  const failedCommand = page.getByRole("button", { name: /false/ });
-  await expect(runningCommand).toBeVisible();
-  await expect(failedCommand).toBeVisible();
-  await expect(completedCommand.getByTestId("command-status-completed")).toBeVisible();
-  await expect(runningCommand.getByTestId("command-status-running")).toBeVisible();
-  await expect(failedCommand.getByTestId("command-status-failed")).toBeVisible();
-  await completedCommand.click();
-  const commandOutput = page.getByTestId("chat-scroll-area").getByText("/tmp/e2e");
-  await expect(commandOutput).toBeVisible();
-  await expect
-    .poll(async () =>
-      commandOutput.evaluate((element: HTMLElement) => {
-        const scrollArea = element.closest('[data-slot="scroll-area"]');
-        if (!(scrollArea instanceof HTMLElement)) {
-          throw new Error("Missing command output scroll area");
-        }
-        return scrollArea.getBoundingClientRect().height;
-      }),
-    )
-    .toBeLessThan(96);
+  await expect(page.getByText("I am checking the relevant files now.")).toBeVisible();
+  await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
+  await expect(page.getByTestId("intermediate-working-status")).toContainText(/Working|处理中/);
+  await expect(page.getByTestId("intermediate-working-duration")).toContainText(/\d/);
+  await expect(page.getByRole("button", { name: /pwd && printf "done"/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /sleep 10/ })).toHaveCount(0);
+  await expect(page.getByText(/Thinking|思考中/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /deploy production/ })).toBeVisible();
+  await expect(page.getByText(/Waiting for approval|等待审批/)).toBeVisible();
 });
 
-test("streaming diff keeps user-selected horizontal scroll position", async ({ page }) => {
+test("completed routine commands stay hidden while narrative and file summaries remain", async ({
+  page,
+}) => {
   await openApp(page);
-  const threadId = "e2e-diff-horizontal-scroll-thread";
-  const longValue = "x".repeat(220);
-  const diff = [
-    "diff --git a/src/wide.py b/src/wide.py",
-    "index 1111111..2222222 100644",
-    "--- a/src/wide.py",
-    "+++ b/src/wide.py",
-    "@@ -1,20 +1,20 @@",
-    ...Array.from(
-      { length: 36 },
-      (_, index) => `+wide_line_${String(index + 1).padStart(3, "0")} = '${longValue}'`,
-    ),
-  ].join("\n");
-
+  const threadId = "e2e-compact-completed-work-thread";
   await seedGatewayThread(page, {
     threadId,
-    projectId: 1,
-    currentThread: { id: threadId, name: "Diff Horizontal Scroll" },
+    currentThread: { id: threadId, name: "Compact Completed Work" },
     history: {
       thread: {
         id: threadId,
         turns: [
           {
-            id: "turn-diff-horizontal",
-            status: "running",
+            id: "turn-completed-routine",
+            status: "completed",
             items: [
               {
-                id: "file-wide-1",
+                id: "completed-user",
+                type: "userMessage",
+                content: [{ type: "text", text: "Summarize the completed work" }],
+              },
+              {
+                id: "completed-agent-progress",
+                type: "agentMessage",
+                text: "I checked the relevant files and completed the requested update.",
+              },
+              {
+                id: "completed-command",
+                type: "commandExecution",
+                status: "completed",
+                command: "sed -n '1,240p' app/components/thread/timeline-rows.ts",
+              },
+              {
+                id: "completed-empty-reasoning",
+                type: "reasoning",
+                status: "completed",
+              },
+              {
+                id: "completed-collab-tool",
+                type: "collabAgentToolCall",
+                status: "completed",
+              },
+              {
+                id: "completed-file-change",
                 type: "fileChange",
-                status: "running",
-                changes: [{ path: "src/wide.py", kind: "update", diff }],
+                status: "completed",
+                changes: [{ path: "/workspace/src/example.ts", kind: "update" }],
+              },
+              {
+                id: "completed-final",
+                type: "agentMessage",
+                phase: "final_answer",
+                text: "The requested update is complete.",
               },
             ],
           },
@@ -198,27 +214,96 @@ test("streaming diff keeps user-selected horizontal scroll position", async ({ p
   });
 
   await openIntermediateSteps(page);
-  await expect(page.getByRole("button", { name: /src\/wide\.py/ })).toHaveAttribute(
-    "data-state",
-    "open",
-  );
-  await expect(page.getByText("wide_line_001")).toBeVisible();
-  const chosenScrollLeft = await setDiffScrollLeft(page, "src/wide.py", 96);
-  expect(chosenScrollLeft).toBeGreaterThan(0);
-
-  await appendFileDiffLines(page, {
-    itemId: "file-wide-1",
-    path: "src/wide.py",
-    prefix: `streamed wide diff line ${longValue}`,
-    count: 24,
-  });
-
-  await page.waitForTimeout(300);
-  await expect.poll(() => diffScrollLeft(page, "src/wide.py")).toBeGreaterThanOrEqual(94);
-  await expect.poll(() => diffScrollLeft(page, "src/wide.py")).toBeLessThanOrEqual(98);
+  await expect(
+    page.getByText("I checked the relevant files and completed the requested update."),
+  ).toBeVisible();
+  await expect(page.getByTestId("file-change-summary")).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /sed -n '1,240p' app\/components\/thread\/timeline-rows\.ts/,
+    }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/Thinking|思考中/)).toHaveCount(0);
 });
 
-test("switching threads keeps asynchronously rendered diff content in normal flow", async ({
+test("multiple steers remain visible between their own intermediate sections", async ({ page }) => {
+  await openApp(page);
+  const threadId = "e2e-steered-intermediate-sections";
+  await seedGatewayThread(page, {
+    threadId,
+    currentThread: { id: threadId, name: "Steered sections" },
+    history: {
+      thread: {
+        id: threadId,
+        turns: [
+          {
+            id: "turn-steered-sections",
+            status: "running",
+            startedAt: Math.floor(Date.now() / 1000) - 65,
+            items: [
+              {
+                id: "user-original",
+                type: "userMessage",
+                content: [{ type: "text", text: "Original request shown first" }],
+              },
+              {
+                id: "agent-progress-original",
+                type: "agentMessage",
+                text: "Progress for the original request",
+              },
+              {
+                id: "steer-one",
+                clientId: "steer-one",
+                type: "userMessage",
+                content: [{ type: "text", text: "First steer remains visible" }],
+              },
+              {
+                id: "command-after-steer-one",
+                type: "commandExecution",
+                status: "completed",
+                command: "routine command after first steer",
+              },
+              {
+                id: "agent-progress-steer-one",
+                type: "agentMessage",
+                text: "Progress after the first steer",
+              },
+              {
+                id: "steer-two",
+                clientId: "steer-two",
+                type: "userMessage",
+                content: [{ type: "text", text: "Second steer remains visible" }],
+              },
+              {
+                id: "collab-after-steer-two",
+                type: "collabAgentToolCall",
+                status: "inProgress",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  await expect(page.getByText("Original request shown first")).toBeVisible();
+  await expect(page.getByText("First steer remains visible")).toBeVisible();
+  await expect(page.getByText("Second steer remains visible")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveCount(3);
+  await expect(page.getByTestId("active-prompt-recall")).toHaveCount(0);
+  await expect(page.getByTestId("intermediate-header-duration")).toContainText(/1m/);
+
+  await page
+    .getByRole("button", { name: /Intermediate steps|中间过程/ })
+    .last()
+    .click();
+  await expect(page.getByText("Progress for the original request")).toBeVisible();
+  await expect(page.getByText("Progress after the first steer")).toBeVisible();
+  await expect(page.getByTestId("intermediate-working-status")).toHaveCount(1);
+  await expect(page.getByText("routine command after first steer")).toHaveCount(0);
+});
+
+test("switching threads keeps hidden diff details out of the intermediate summary", async ({
   page,
 }) => {
   await openApp(page);
@@ -299,13 +384,10 @@ test("switching threads keeps asynchronously rendered diff content in normal flo
   await page.getByTestId(`thread-button-${shortThreadId}`).click();
   await expect(page.getByText("short thread content")).toBeVisible();
   await page.getByTestId(`thread-button-${diffThreadId}`).click();
-  await expect(page.getByRole("button", { name: /src\/async\.py/ })).toHaveAttribute(
-    "data-state",
-    "open",
-  );
-  await expect(page.getByText("async_diff_line_120")).toBeVisible();
+  await expect(page.getByTestId("file-change-summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: /src\/async\.py/ })).toHaveCount(0);
+  await expect(page.getByText("async_diff_line_120")).toHaveCount(0);
   await expect(page.getByText(finalMarker)).toBeVisible();
-  await expect.poll(() => diffEndsBeforeText(page, finalMarker)).toBe(true);
 });
 
 function cachedThreadView(threadId: string, history: ThreadHistoryState): ThreadViewState {
@@ -325,12 +407,6 @@ function cachedThreadView(threadId: string, history: ThreadHistoryState): Thread
     loading: false,
     error: null,
   };
-}
-
-async function diffEndsBeforeText(page: import("@playwright/test").Page, text: string) {
-  const diffBox = await page.locator(".diff-markdown").first().boundingBox();
-  const textBox = await page.getByText(text).boundingBox();
-  return Boolean(diffBox && textBox && diffBox.y + diffBox.height <= textBox.y + 1);
 }
 
 async function openIntermediateSteps(page: import("@playwright/test").Page) {

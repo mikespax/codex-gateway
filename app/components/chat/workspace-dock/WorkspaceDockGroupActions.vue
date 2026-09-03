@@ -3,6 +3,9 @@ import type { IDockviewHeaderActionsProps } from "dockview-vue";
 import { ArrowDownToLineIcon, Maximize2Icon, PictureInPicture2Icon, Rows3Icon } from "@lucide/vue";
 import { onBeforeUnmount, ref } from "vue";
 import { Button } from "@codex-gateway/ui/button";
+import { storeToRefs } from "pinia";
+import CodexUsageBadge from "@/components/chat/CodexUsageBadge.vue";
+import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 
 import { floatDockItem, popoutDockItem } from "./actions";
 
@@ -10,6 +13,7 @@ const props = defineProps<{ params?: IDockviewHeaderActionsProps }>();
 if (!props.params) throw new Error("Dockview header action parameters are unavailable");
 const params = props.params;
 const { t } = useI18n();
+const { selectedHostId } = storeToRefs(useGatewayNavigationStore());
 const location = ref(params.group.api.location.type);
 const locationSubscription = params.group.api.onDidLocationChange((event) => {
   location.value = event.location.type;
@@ -43,6 +47,7 @@ function popout() {
 
 <template>
   <div class="flex h-full items-center gap-0.5 px-1">
+    <CodexUsageBadge :host-id="selectedHostId" />
     <Button
       variant="ghost"
       size="icon-sm"

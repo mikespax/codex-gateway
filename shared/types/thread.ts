@@ -60,6 +60,97 @@ export interface ThreadOpenResult {
   recentEvents: GatewayEvent[];
 }
 
+export interface ThreadMoveResult {
+  source: {
+    hostId: number;
+    threadId: string;
+  };
+  target: {
+    hostId: number;
+    projectId: number;
+    threadId: string;
+    title: string;
+    cwd: string;
+  };
+}
+
+export interface ThreadNativeMigrationResult {
+  mode: "native";
+  source: {
+    hostId: number;
+    threadId: string;
+    rolloutPath: string;
+    historyMode: "legacy" | "paginated";
+    turnCount: number;
+    queueCount: number;
+  };
+  target: {
+    hostId: number;
+    threadId: string;
+    rolloutPath: string;
+    cwd: string;
+    requestedCwd: string;
+    historyMode: "legacy" | "paginated";
+    turnCount: number;
+    queueCount: number;
+  };
+  transfer: {
+    files: number;
+    bytes: number;
+    rollouts: {
+      files: number;
+      bytes: number;
+    };
+    attachments: {
+      files: number;
+      bytes: number;
+    };
+  };
+  verification: {
+    sameThreadId: true;
+    sameRolloutRelativePath: true;
+    metadataParity: true;
+    historyParity: true;
+    descendantsVerified: true;
+    goalsVerified: true;
+    queuesVerified: true;
+  };
+  descendants: Array<{
+    threadId: string;
+    parentThreadId: string | null;
+    rolloutPath: string;
+    targetRolloutPath: string;
+    turnCount: number;
+    queueCount: number;
+  }>;
+}
+
+export type ThreadMoveReadinessStatus =
+  | "ready"
+  | "source_workspace_missing"
+  | "target_workspace_missing"
+  | "source_not_git"
+  | "target_not_git"
+  | "repository_mismatch"
+  | "source_commit_missing_on_target";
+
+export interface ThreadMoveReadiness {
+  status: ThreadMoveReadinessStatus;
+  source: {
+    hostId: number;
+    threadId: string;
+    cwd: string;
+  };
+  target: {
+    hostId: number;
+    cwd: string;
+  };
+  /** Present when the source was resolved through a dedicated VPS operations fallback. */
+  sourceWorkspaceKind?: "operations_fallback";
+  sourceWorkspaceCwd?: string;
+  recommendedTargetCwd?: string | null;
+}
+
 export interface ThreadTurnsPageResult {
   history: ThreadTimelineHistoryState;
   turnsPage: {
@@ -83,6 +174,7 @@ export interface ThreadCollaborationMode {
 export interface ThreadSettingsState {
   model?: string | null;
   effort?: ReasoningEffort | null;
+  serviceTier?: string | null;
   approvalPolicy?: ApprovalPolicy | null;
   collaborationMode?: ThreadCollaborationMode | null;
 }
@@ -230,6 +322,7 @@ export interface FileReference {
 export interface ComposerTurnOptions {
   model?: string | null;
   effort?: ReasoningEffort | null;
+  serviceTier?: string | null;
   approvalPolicy?: ApprovalPolicy | null;
   collaborationMode?: ThreadCollaborationMode | null;
   images?: Array<{

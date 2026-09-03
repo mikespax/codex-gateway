@@ -7,7 +7,8 @@ import { createError, type H3Event } from "h3";
 import ensureError from "ensure-error";
 
 const MAX_UPLOAD_FILES = 8;
-const MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024;
+// Support common project archives while keeping each streamed request bounded.
+const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024;
 
 export interface ParsedUploadFile {
   originalName: string;
@@ -35,7 +36,7 @@ export function streamMultipartUploads(event: H3Event, tempDir: string) {
     const files: ParsedUploadFile[] = [];
     const writes: Promise<void>[] = [];
     let limitError: Error | null = null;
-    let writeError: unknown = null;
+    let writeError: unknown = undefined;
     let settled = false;
 
     const settle = (error?: unknown) => {

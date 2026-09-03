@@ -22,6 +22,7 @@ import {
 import { hostSessionEvents, type HostSessionClosedEvent } from "./host-session-events";
 import { activeMainThreadMonitor } from "./active-main-thread-monitor";
 import { threadBroker } from "./broker";
+import { hostMetricsManager } from "../infra/host-services";
 
 class HostRuntimeSupervisor {
   private readonly slots = new Map<string, HostRuntimeSlot>();
@@ -82,9 +83,15 @@ class HostRuntimeSupervisor {
           nextState.configLoaded = true;
           replaceCurrentGatewayMemoryState(nextState);
         }
+        // Use the normalized in-memory records. The durable configuration can contain a
+        // compatibility label from an older Gateway version, but runtime services and the UI
+        // must converge on the current canonical display name immediately after boot.
         this.syncUserConfig(user.id, {
-          hosts: config.hosts,
+          hosts: currentGatewayMemoryState().hosts,
         });
+        for (const host of currentGatewayMemoryState().hosts) {
+          hostMetricsManager.ensureCollector(user.id, host);
+        }
       });
     }
   }

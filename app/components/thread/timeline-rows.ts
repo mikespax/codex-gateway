@@ -1,6 +1,9 @@
 import type { ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
+import { threadItemText } from "@/utils/thread-items";
 import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
+import { commandDisplayLabel } from "@/utils/thread-item-display";
+import { compactCompletedFileChangeRuns } from "./completed-file-change-runs";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
 
@@ -8,7 +11,7 @@ type ThreadTimelineItemSection = "user" | "intermediate" | "final";
 
 const estimatedItemHeights: Partial<Record<ThreadTimelineItem["type"], number>> = {
   commandExecution: 48,
-  fileChange: 440,
+  fileChange: 48,
   agentMessage: 144,
   reasoning: 128,
   userMessage: 160,
@@ -21,6 +24,13 @@ export type ThreadTimelineRow =
       turnId: string;
       count: number;
       open: boolean;
+      preview: string;
+      segmentNumber?: number;
+      segmentCount?: number;
+      working?: boolean;
+      startedAt?: number | null;
+      latestOperation?: string | null;
+      footer?: boolean;
     }
   | {
       key: string;
@@ -31,6 +41,8 @@ export type ThreadTimelineRow =
       userMessageVariant: "normal" | "steer";
       turnTiming: DisplayedTurnTiming | null;
       agentActionsAvailable: boolean;
+      sentAt: number | string | null;
+      turnIsActive: boolean;
     }
   | {
       key: string;
@@ -40,6 +52,13 @@ export type ThreadTimelineRow =
       completedAt: number | null;
       durationMs: number | null;
       active: boolean;
+    }
+  | {
+      key: string;
+      type: "workingStatus";
+      turnId: string;
+      startedAt: number | null;
+      latestOperation: string | null;
     };
 
 export interface ThreadTimelineTurnState {
@@ -58,34 +77,70 @@ export function buildThreadTimelineRows(input: {
 }) {
   return input.turns.flatMap(({ turn, sections, intermediateOpen }) => {
     const rows: ThreadTimelineRow[] = [];
-    const timing = displayedTurnTiming(turn);
+    const timing = displayedTurnTiming(turn, sections.turnIsActive);
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
-    appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
+    appendItemRows(rows, input.threadId, turn, "user", sections.userItems, sections);
 
-    if (sections.intermediateItems.length) {
+    const intermediateSegments = splitIntermediateSegments(sections);
+    intermediateSegments.forEach((segment, segmentIndex) => {
+      const isLatestSegment = segmentIndex === intermediateSegments.length - 1;
+      if (segment.promptItem) {
+        appendItemRows(rows, input.threadId, turn, "user", [segment.promptItem], sections);
+      }
+      const intermediatePresentation = presentIntermediateItems(
+        segment.items,
+        sections.turnIsActive,
+        isLatestSegment,
+      );
+      const working = sections.turnIsActive && isLatestSegment;
       rows.push({
-        key: `${input.threadId}:turn-${turn.id}:intermediate-header`,
+        key: `${input.threadId}:turn-${turn.id}:intermediate-header-${segmentIndex}`,
         type: "intermediateHeader",
         turnId: turn.id,
-        count: sections.intermediateItems.length,
+        count: intermediatePresentation.count,
         open: intermediateOpen,
+        preview: intermediatePreview(intermediatePresentation.items),
+        segmentNumber: segmentIndex + 1,
+        segmentCount: intermediateSegments.length,
+        working,
+        startedAt: working ? timing.startedAt : undefined,
       });
       if (intermediateOpen) {
         appendItemRows(
           rows,
           input.threadId,
-          turn.id,
+          turn,
           "intermediate",
-          sections.intermediateItems,
+          intermediatePresentation.items,
           sections,
         );
+        if (intermediatePresentation.showWorkingStatus) {
+          rows.push({
+            key: `${input.threadId}:turn-${turn.id}:working-status`,
+            type: "workingStatus",
+            turnId: turn.id,
+            startedAt: timing.startedAt,
+            latestOperation: latestIntermediateOperation(segment.items),
+          });
+        }
+        if (isLatestSegment) {
+          rows.push({
+            key: `${input.threadId}:turn-${turn.id}:intermediate-footer`,
+            type: "intermediateHeader",
+            turnId: turn.id,
+            count: intermediatePresentation.count,
+            open: true,
+            preview: "",
+            footer: true,
+          });
+        }
       }
-    }
+    });
 
     appendItemRows(
       rows,
       input.threadId,
-      turn.id,
+      turn,
       "final",
       sections.finalItems,
       sections,
@@ -121,15 +176,139 @@ export function reuseUnchangedTimelineRows(
 
 export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   if (row === undefined) return 96;
-  if (row.type === "intermediateHeader") return 48;
+  if (row.type === "intermediateHeader") return 72;
   if (row.type === "turnDuration") return 28;
+  if (row.type === "workingStatus") {
+    return row.latestOperation !== null && row.latestOperation !== "" ? 52 : 36;
+  }
   return estimatedItemHeights[row.item.type] ?? 96;
+}
+
+function presentIntermediateItems(
+  intermediateItems: ThreadTimelineItem[],
+  turnIsActive: boolean,
+  isLatestSegment: boolean,
+) {
+  const items = compactCompletedFileChangeRuns(
+    intermediateItems.filter((item) => !isRoutineLiveActivity(item)),
+  );
+  if (!turnIsActive) {
+    return {
+      items,
+      count: items.length,
+      showWorkingStatus: false,
+    };
+  }
+
+  const showWorkingStatus = isLatestSegment;
+  return {
+    items,
+    count: items.length + (showWorkingStatus ? 1 : 0),
+    showWorkingStatus,
+  };
+}
+
+function latestIntermediateOperation(items: ThreadTimelineItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const operation = safeIntermediateOperation(items[index]!);
+    if (operation !== null) return operation;
+  }
+  return null;
+}
+
+function safeIntermediateOperation(item: ThreadTimelineItem) {
+  if (item.type === "commandExecution") {
+    return compactOperationText(commandDisplayLabel(item.command)) || "Command";
+  }
+  if (item.type === "fileChange") {
+    return "Updating files";
+  }
+  if (item.type === "webSearch") {
+    return compactOperationText(item.query) || "Web search";
+  }
+  return null;
+}
+
+function compactOperationText(value: string | null | undefined) {
+  return (value ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
+function isRoutineLiveActivity(item: ThreadTimelineItem) {
+  if (item.type === "commandExecution") {
+    return item.pendingApproval == null;
+  }
+  if (item.type === "reasoning") {
+    return threadItemText(item).trim() === "";
+  }
+  return [
+    "appNotification",
+    "collabAgentToolCall",
+    "contextCompaction",
+    "dynamicToolCall",
+    "enteredReviewMode",
+    "exitedReviewMode",
+    "imageView",
+    "mcpToolCall",
+    "sleep",
+    "subAgentActivity",
+    "webSearch",
+  ].includes(item.type);
+}
+
+function splitIntermediateSegments(sections: ThreadTurnSections) {
+  const segments: Array<{ promptItem?: ThreadTimelineItem; items: ThreadTimelineItem[] }> = [];
+  let current = {
+    promptItem: undefined as ThreadTimelineItem | undefined,
+    items: [] as ThreadTimelineItem[],
+  };
+
+  sections.intermediateItems.forEach((item) => {
+    if (userMessageVariant(item, sections) === "steer") {
+      if (current.items.length || current.promptItem) segments.push(current);
+      current = { promptItem: item, items: [] };
+      return;
+    }
+    current.items.push(item);
+  });
+  if (
+    current.items.length ||
+    current.promptItem ||
+    (sections.turnIsActive && segments.length === 0)
+  ) {
+    segments.push(current);
+  }
+  return segments;
+}
+
+function intermediatePreview(items: ThreadTimelineItem[]) {
+  return items
+    .slice(-2)
+    .map(intermediateItemPreview)
+    .filter((value, index, values) => value !== "" && values.indexOf(value) === index)
+    .join(" · ")
+    .slice(0, 240);
+}
+
+function intermediateItemPreview(item: ThreadTimelineItem) {
+  if (item.type === "commandExecution") {
+    return commandDisplayLabel(item.command).replace(/\s+/g, " ");
+  }
+  if (item.type === "reasoning") {
+    return threadItemText(item).replace(/\s+/g, " ").trim() || "Thinking…";
+  }
+  if (item.type === "webSearch") {
+    return typeof item.query === "string" && item.query.trim() !== ""
+      ? item.query.replace(/\s+/g, " ").trim()
+      : "Web search";
+  }
+  const text = "text" in item && typeof item.text === "string" ? item.text : "";
+  return text.replace(/\s+/g, " ").trim() || item.type;
 }
 
 function appendItemRows(
   rows: ThreadTimelineRow[],
   threadId: string | null,
-  turnId: string,
+  turn: ThreadTimelineTurn,
   section: ThreadTimelineItemSection,
   items: ThreadTimelineItem[],
   sections: ThreadTurnSections,
@@ -139,24 +318,54 @@ function appendItemRows(
 ) {
   items.forEach((item, index) => {
     rows.push({
-      key: `${threadId}:turn-${turnId}:${section}:${itemKey(item, section, index)}`,
+      key: `${threadId}:turn-${turn.id}:${section}:${itemKey(item, section, index)}`,
       type: "item",
-      turnId,
+      turnId: turn.id,
       section,
       item,
       userMessageVariant: userMessageVariant(item, sections),
       turnTiming: item === timingTarget ? timing : null,
       agentActionsAvailable: item === timingTarget && agentActionsAvailable,
+      sentAt: messageTimestamp(item, turn),
+      turnIsActive: sections.turnIsActive,
     });
   });
 }
 
-function displayedTurnTiming(turn: ThreadTimelineTurn): DisplayedTurnTiming {
+function messageTimestamp(item: ThreadTimelineItem, turn: ThreadTimelineTurn) {
+  if (item.type === "userMessage") {
+    return firstTimestamp(item.createdAt, item.startedAt, turn.startedAt);
+  }
+  if (item.type === "agentMessage") {
+    return firstTimestamp(
+      item.completedAt,
+      item.createdAt,
+      turn.completedAt,
+      item.startedAt,
+      turn.startedAt,
+    );
+  }
+  return null;
+}
+
+function firstTimestamp(...values: unknown[]): number | string | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Date.parse(value))) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function displayedTurnTiming(turn: ThreadTimelineTurn, active: boolean): DisplayedTurnTiming {
+  const hasTerminalTiming = turn.completedAt != null || turn.durationMs != null;
   return {
-    startedAt: typeof turn.startedAt === "number" ? turn.startedAt : null,
+    startedAt:
+      (active || hasTerminalTiming) && typeof turn.startedAt === "number" ? turn.startedAt : null,
     completedAt: typeof turn.completedAt === "number" ? turn.completedAt : null,
     durationMs: turn.durationMs ?? null,
-    active: turn.status === "inProgress",
+    active,
   };
 }
 
@@ -167,7 +376,17 @@ function hasTimingValue(timing: DisplayedTurnTiming) {
 function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
   if (left.type !== right.type) return false;
   if (left.type === "intermediateHeader" && right.type === "intermediateHeader") {
-    return left.count === right.count && left.open === right.open && left.turnId === right.turnId;
+    return (
+      left.count === right.count &&
+      left.open === right.open &&
+      left.preview === right.preview &&
+      left.segmentNumber === right.segmentNumber &&
+      left.segmentCount === right.segmentCount &&
+      left.working === right.working &&
+      left.startedAt === right.startedAt &&
+      left.footer === right.footer &&
+      left.turnId === right.turnId
+    );
   }
   if (left.type === "item" && right.type === "item") {
     // App-server deltas mutate this reactive item proxy in place. Reuse the lightweight row wrapper
@@ -180,6 +399,8 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.section === right.section &&
       left.userMessageVariant === right.userMessageVariant &&
       left.agentActionsAvailable === right.agentActionsAvailable &&
+      left.sentAt === right.sentAt &&
+      left.turnIsActive === right.turnIsActive &&
       sameTurnTiming(left.turnTiming, right.turnTiming)
     );
   }
@@ -190,6 +411,13 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.completedAt === right.completedAt &&
       left.durationMs === right.durationMs &&
       left.active === right.active
+    );
+  }
+  if (left.type === "workingStatus" && right.type === "workingStatus") {
+    return (
+      left.turnId === right.turnId &&
+      left.startedAt === right.startedAt &&
+      left.latestOperation === right.latestOperation
     );
   }
   return false;

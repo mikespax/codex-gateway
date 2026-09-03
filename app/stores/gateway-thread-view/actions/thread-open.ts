@@ -1,4 +1,4 @@
-import type { ComposerTurnOptions } from "~~/shared/types";
+import type { ComposerTurnOptions, ThreadHistoryState } from "~~/shared/types";
 import { INITIAL_TURN_PAGE_LIMIT } from "~~/shared/config";
 import { threadTurnsFromHistory } from "~~/shared/thread-history/shape";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
@@ -29,6 +29,7 @@ import {
   syncSelectedRoute,
 } from "@/stores/gateway/thread-open/view-state";
 import { patchThreadView, upsertThreadView } from "@/stores/gateway/thread-open/thread-view-cache";
+import { readPersistentThreadView } from "@/stores/gateway/thread-open/persistent-thread-view-cache";
 import { clearThreadCompletionAttention } from "@/stores/gateway/thread-runtime/completion-attention";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 
@@ -102,6 +103,36 @@ export function createThreadOpenActions() {
         void syncOpenThreadFromServer({
           hostId: targetHostId,
           projectId: targetProjectId,
+          threadId,
+          viewEpoch,
+          replaceRoute: context?.replaceRoute,
+          showLoading: false,
+          scrollToLatest: false,
+          limit: cachedTurnLimit,
+        });
+        return;
+      }
+      const sessionIsCurrent = captureSessionEpoch();
+      const persistentView = await readPersistentThreadView(targetHostId, threadId);
+      if (
+        persistentView !== null &&
+        sessionIsCurrent() &&
+        isCurrentViewTransition(viewEpoch) &&
+        navigation.selectedHostId === targetHostId &&
+        navigation.selectedThreadId === threadId
+      ) {
+        upsertThreadView(persistentView);
+        restoreThreadView(targetHostId, threadId);
+        const cachedTurnLimit = Math.max(
+          INITIAL_TURN_PAGE_LIMIT,
+          threadTurnsFromHistory(persistentView.history).length,
+        );
+        rememberOpenThread(threadId);
+        syncSelectedRoute({ replace: context?.replaceRoute });
+        requestScrollToLatest();
+        void syncOpenThreadFromServer({
+          hostId: targetHostId,
+          projectId: persistentView.projectId ?? targetProjectId,
           threadId,
           viewEpoch,
           replaceRoute: context?.replaceRoute,
@@ -219,9 +250,15 @@ export function createThreadOpenActions() {
       if (hostId === null || threadId === null || threadId === "") return;
       const viewEpoch = views.viewEpoch;
       const sessionIsCurrent = captureSessionEpoch();
+      const limit = retainedTurnLimit(views.history);
       if (options.showLoading === true) views.loading = true;
       try {
-        const result = await requestActivateThreadSnapshot({ hostId, projectId, threadId });
+        const result = await requestActivateThreadSnapshot({
+          hostId,
+          projectId,
+          threadId,
+          limit,
+        });
         if (
           !sessionIsCurrent() ||
           views.viewEpoch !== viewEpoch ||
@@ -290,6 +327,7 @@ export function createThreadOpenActions() {
       options: ComposerTurnOptions = {},
       context?: { hostId?: number; projectId?: number | null },
     ) {
+      const gateway = useGatewayBootstrapStore();
       const navigation = useGatewayNavigationStore();
       cacheSelectedThreadView();
       const viewEpoch = beginViewTransition();
@@ -301,24 +339,34 @@ export function createThreadOpenActions() {
       }
       if (navigation.selectedHostId === null) return;
       const sessionIsCurrent = captureSessionEpoch();
-      const result = await requestStartThread(options);
-      if (!sessionIsCurrent() || !isCurrentViewTransition(viewEpoch)) return;
-      const threadId = applyStartedThreadResult(result);
-      cacheSelectedThreadView();
-      rememberOpenThread(threadId);
-      syncSelectedRoute();
-      useGatewayRealtimeStore().connectThreadEvents(
-        navigation.selectedHostId,
-        threadId,
-        useGatewayThreadViewStore().lastEventId,
-        useGatewayThreadViewStore().eventEpoch,
-      );
+      const hostId = navigation.selectedHostId;
+      const projectId = navigation.selectedProjectId;
+      try {
+        const result = await requestStartThread(options);
+        if (!sessionIsCurrent() || !isCurrentViewTransition(viewEpoch)) return;
+        const threadId = applyStartedThreadResult(result);
+        cacheSelectedThreadView();
+        rememberOpenThread(threadId);
+        syncSelectedRoute();
+        useGatewayRealtimeStore().connectThreadEvents(
+          navigation.selectedHostId,
+          threadId,
+          useGatewayThreadViewStore().lastEventId,
+          useGatewayThreadViewStore().eventEpoch,
+        );
 
-      // Creating the thread is the authoritative state transition. Commit its selection and URL
-      // before refreshing the sidebar catalog: that secondary RPC may be slow while a host has
-      // just upgraded/restarted, but it must not leave a successfully created thread unreachable.
-      await navigation.listThreads();
-      cacheSelectedThreadView();
+        // Creating the thread is the authoritative state transition. Commit its selection and URL
+        // before refreshing the sidebar catalog: that secondary RPC may be slow while a host has
+        // just upgraded/restarted, but it must not leave a successfully created thread unreachable.
+        await navigation.listThreads();
+        cacheSelectedThreadView();
+      } catch (error: unknown) {
+        if (!sessionIsCurrent() || !isCurrentViewTransition(viewEpoch)) return;
+        gateway.setError(
+          messageFromError(error, gateway.t("app.openThreadFailed"), gateway.errorLabels),
+          { hostId, projectId, threadId: navigation.selectedThreadId },
+        );
+      }
     },
   };
 }
@@ -336,11 +384,13 @@ async function recoverThreadSnapshot(hostId: number, threadId: string) {
   }
 
   const sessionIsCurrent = captureSessionEpoch();
+  const limit = retainedTurnLimit(selected ? views.history : (existing?.history ?? null));
   try {
     const result = await requestActivateThreadSnapshot({
       hostId,
       projectId: existing?.projectId ?? navigation.selectedProjectId,
       threadId,
+      limit,
     });
     if (!sessionIsCurrent()) return;
     const stillSelected =
@@ -470,4 +520,8 @@ async function refreshGoalAfterOpen(hostId: number, threadId: string) {
       { hostId, threadId, projectId: navigation.selectedProjectId },
     );
   }
+}
+
+function retainedTurnLimit(history: ThreadHistoryState | null) {
+  return Math.max(INITIAL_TURN_PAGE_LIMIT, threadTurnsFromHistory(history).length);
 }

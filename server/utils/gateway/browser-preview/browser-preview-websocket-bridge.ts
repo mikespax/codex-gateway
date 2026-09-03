@@ -19,8 +19,9 @@ interface BrowserPreviewWebSocketBridgeOptions {
 
 /**
  * Bridges the two standard WebSocket implementations without adding another protocol. crossws
- * supplies waitForDrain() for the browser side and ws supplies bufferedAmount for the upstream;
- * the bounded queues only cover the periods where either endpoint cannot currently accept data.
+ * exposes the browser-side WebSocket through peer.websocket, while ws exposes bufferedAmount
+ * directly. The bounded queues only cover periods where either endpoint cannot currently accept
+ * data.
  */
 export class BrowserPreviewWebSocketBridge {
   private upstream: WebSocket | undefined;
@@ -118,7 +119,7 @@ export class BrowserPreviewWebSocketBridge {
   private sendToPeer(frame: BrowserPreviewFrame) {
     if (
       this.queuedToPeer.size ||
-      this.options.peer.bufferedAmount > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES
+      peerBufferedAmount(this.options.peer) > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES
     ) {
       if (!this.queuedToPeer.push(frame)) {
         this.fail(1009, "Browser WebSocket buffer limit exceeded");
@@ -139,15 +140,13 @@ export class BrowserPreviewWebSocketBridge {
 
   private async drainPeerQueue() {
     while (!this.closed && this.queuedToPeer.size) {
-      if (this.options.peer.bufferedAmount > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES) {
-        try {
-          await this.options.peer.waitForDrain({
-            threshold: BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES,
-            signal: this.peerDrainAbort.signal,
-          });
-        } catch {
-          return;
-        }
+      if (peerBufferedAmount(this.options.peer) > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES) {
+        await waitForPeerDrain(
+          this.options.peer,
+          BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES,
+          this.peerDrainAbort.signal,
+        );
+        if (this.peerDrainAbort.signal.aborted) return;
       }
       const frame = this.queuedToPeer.shift();
       if (frame !== undefined) this.safeSendToPeer(frame);
@@ -156,7 +155,7 @@ export class BrowserPreviewWebSocketBridge {
 
   private safeSendToPeer(frame: BrowserPreviewFrame) {
     if (
-      this.options.peer.bufferedAmount + frameByteLength(frame) >
+      peerBufferedAmount(this.options.peer) + frameByteLength(frame) >
       BROWSER_PREVIEW_MAX_WEBSOCKET_BUFFERED_BYTES
     ) {
       this.fail(1009, "Browser WebSocket buffer limit exceeded");
@@ -251,6 +250,32 @@ function textFrame(data: RawData) {
 
 function frameByteLength(frame: BrowserPreviewFrame) {
   return typeof frame === "string" ? Buffer.byteLength(frame) : frame.byteLength;
+}
+
+function peerBufferedAmount(peer: Peer) {
+  return peer.websocket.bufferedAmount ?? 0;
+}
+
+/**
+ * crossws 0.3.x does not expose the waitForDrain helper available in newer adapters. Poll the
+ * standard WebSocket bufferedAmount instead, while retaining cancellation when the bridge closes.
+ */
+async function waitForPeerDrain(peer: Peer, threshold: number, signal: AbortSignal) {
+  while (!signal.aborted && peerBufferedAmount(peer) > threshold) {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", finish);
+        resolve();
+      };
+      timeout = setTimeout(finish, 50);
+      signal.addEventListener("abort", finish, { once: true });
+    });
+  }
 }
 
 function peerCloseCode(code: number) {

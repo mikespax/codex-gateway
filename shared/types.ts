@@ -24,6 +24,10 @@ export type {
   ThreadGoalStatus,
   ThreadGoalTimelineItem,
   ThreadOpenResult,
+  ThreadMoveResult,
+  ThreadNativeMigrationResult,
+  ThreadMoveReadiness,
+  ThreadMoveReadinessStatus,
   ThreadRuntimeStatus,
   ThreadRuntimeStatusUpdate,
   ThreadCollaborationMode,
@@ -33,7 +37,8 @@ export type {
   TokenUsageBreakdown,
   ReasoningEffort,
 } from "./types/thread";
-export type { ModelListResult, ModelRecord } from "./types/models";
+export type { ModelListResult, ModelRecord, ModelServiceTier } from "./types/models";
+export type { CodexRateLimitSummary, CodexRateLimitWindow } from "./types/account-usage";
 export type { TerminalOpenTarget, TerminalScope, TerminalSessionSnapshot } from "./types/terminal";
 export type {
   BrowserPreviewResourceFailure,
@@ -66,6 +71,7 @@ export type {
   HostMetricsSample,
   HostMetricsSnapshot,
   HostNetworkMetrics,
+  HostResourceUsageSummary,
 } from "./types/host-metrics";
 export type { ServerNotification, ServerNotificationTarget } from "./types/notifications";
 export type {

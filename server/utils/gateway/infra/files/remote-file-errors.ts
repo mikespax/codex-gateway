@@ -113,7 +113,12 @@ export function classifyRemoteDirectoryError(
 
 export function isMissingSftpPath(error: unknown) {
   const code = recordFromUnknown(error)?.code;
-  return code === 2 || code === "ENOENT";
+  return (
+    code === 2 ||
+    code === "ENOENT" ||
+    code === "remoteFileNotFound" ||
+    code === "remoteDirectoryNotFound"
+  );
 }
 
 function isDeniedSftpPath(error: unknown) {

@@ -36,6 +36,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const composer = useGatewayComposerStore();
 const userDetachedFromLatest = ref(false);
+const timelineViewport = ref<InstanceType<typeof VirtualTimelineViewport> | null>(null);
 const projectId = computed(() => props.projectId ?? null);
 const planModeActive = computed(() => selectedThreadMode() === "plan");
 const threadIsRunning = computed(() => props.threadStatus === "running");
@@ -48,12 +49,28 @@ provideFilePreviewContext({
   workspaceRoot: computed(() => props.workspaceRoot ?? null),
 });
 
-const turnStates = computed(() =>
-  props.turns.map((turn) => ({
+const turnStates = computed(() => {
+  const states = props.turns.map((turn) => ({
     turn,
     sections: buildThreadTurnSections(turn, { planModeActive: planModeActive.value }),
-  })),
-);
+  }));
+  // Reconnected history can retain stale in-progress item flags for an old turn. Only the newest
+  // active candidate may drive live spinners and elapsed timers, and only while the authoritative
+  // thread runtime is running. This prevents historical steps from counting forever.
+  let currentActiveIndex = -1;
+  if (threadIsRunning.value) {
+    states.forEach((state, index) => {
+      if (state.sections.turnIsActive) currentActiveIndex = index;
+    });
+  }
+  return states.map((state, index) => ({
+    ...state,
+    sections: {
+      ...state.sections,
+      turnIsActive: index === currentActiveIndex,
+    },
+  }));
+});
 const disclosureTurns = computed(() =>
   turnStates.value.map(({ turn, sections }) => ({
     id: turn.id,
@@ -67,6 +84,9 @@ const { isIntermediateOpen, setIntermediateOpen } = useIntermediateStepsDisclosu
   threadIsRunning,
   autoCollapseIntermediate,
 });
+const activeIntermediateIsOpen = computed(() =>
+  disclosureTurns.value.some((turn) => turn.turnIsActive && isIntermediateOpen(turn.id)),
+);
 const rows = computed<ThreadTimelineRow[]>((previous) => {
   const timelineTurns = turnStates.value.map(({ turn, sections }) => ({
     turn,
@@ -106,6 +126,13 @@ function handleUserDetachedChange(detached: boolean) {
   userDetachedFromLatest.value = detached;
 }
 
+function handleIntermediateToggle(turnId: string, open: boolean) {
+  setIntermediateOpen(turnId, open);
+  // Opening active work is an explicit request to watch it. Reclaim the latest edge once, then
+  // TanStack follows subsequent streaming and measurement updates until the reader scrolls away.
+  if (open && threadIsRunning.value) timelineViewport.value?.scrollToLatest();
+}
+
 function estimateRowSize(row: unknown) {
   return estimateThreadTimelineRow(row as ThreadTimelineRow | undefined);
 }
@@ -113,6 +140,19 @@ function estimateRowSize(row: unknown) {
 function timelineRow(row: unknown) {
   return row as ThreadTimelineRow;
 }
+
+watch(
+  [rows, threadIsRunning, activeIntermediateIsOpen],
+  ([, running, intermediateOpen]) => {
+    // Expanded live work is a deliberate "watch" mode. Ask the viewport to reclaim the latest
+    // edge after every rendered delta so dynamic terminal cards and measurements cannot strand
+    // the newest step below the composer. A reader who scrolls away owns that position; their
+    // explicit detachment always wins and stops these requests.
+    if (!running || !intermediateOpen || userDetachedFromLatest.value) return;
+    timelineViewport.value?.scrollToLatest();
+  },
+  { flush: "post" },
+);
 
 watch(
   () => props.threadId,
@@ -133,6 +173,7 @@ watch(
   -->
   <VirtualTimelineViewport
     :key="threadId ?? 'empty-thread'"
+    ref="timelineViewport"
     :rows="rows"
     :estimate-size="estimateRowSize"
     :scroll-to-latest-token="scrollToLatestToken"
@@ -158,7 +199,7 @@ watch(
         :row="timelineRow(row)"
         :host-id="hostId"
         :thread-id="threadId"
-        @intermediate-toggle="setIntermediateOpen"
+        @intermediate-toggle="handleIntermediateToggle"
       />
     </template>
   </VirtualTimelineViewport>

@@ -1,5 +1,7 @@
 // This is the single version gate shared by remote install, upgrade and RPC client metadata.
-export const SUPPORTED_CODEX_VERSION = "0.149.0";
+// Native thread migration requires the app-server resume/list behavior shipped in 0.152.
+// Pin to the version verified on the Lenovo target until a newer release is exercised here.
+export const SUPPORTED_CODEX_VERSION = "0.152.1";
 
 export interface ParsedCodexVersion {
   raw: string;

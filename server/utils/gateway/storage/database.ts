@@ -124,6 +124,78 @@ function migrate(db: DatabaseSync) {
       notification_sent_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS android_devices (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      fcm_token_hash TEXT NOT NULL,
+      encrypted_fcm_token TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS android_notifications (
+      device_id TEXT NOT NULL REFERENCES android_devices(id) ON DELETE CASCADE,
+      notification_key TEXT NOT NULL,
+      target_kind TEXT NOT NULL CHECK (target_kind IN ('thread', 'tmuxMonitor')),
+      host_id INTEGER NOT NULL,
+      project_id INTEGER,
+      thread_id TEXT,
+      monitor_id INTEGER,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      reply_allowed INTEGER NOT NULL DEFAULT 0,
+      delivery_status TEXT NOT NULL CHECK (delivery_status IN ('pending', 'sent', 'failed')),
+      delivery_error TEXT,
+      created_at TEXT NOT NULL,
+      sent_at TEXT,
+      expires_at TEXT NOT NULL,
+      replied_at TEXT,
+      PRIMARY KEY (device_id, notification_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS android_reply_requests (
+      device_id TEXT NOT NULL REFERENCES android_devices(id) ON DELETE CASCADE,
+      client_message_id TEXT NOT NULL,
+      notification_key TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('processing', 'accepted', 'failed')),
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (device_id, client_message_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS supervisor_grants (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      host_id INTEGER NOT NULL,
+      project_id INTEGER,
+      thread_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS thread_snapshot_cache (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      host_id INTEGER NOT NULL,
+      thread_id TEXT NOT NULL,
+      source_updated_at INTEGER NOT NULL,
+      turn_count INTEGER NOT NULL,
+      encrypted_snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_accessed_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, host_id, thread_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_tmux_monitors_host
@@ -131,5 +203,59 @@ function migrate(db: DatabaseSync) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_tmux_monitors_active_location
       ON tmux_monitors(user_id, host_id, session_name, window_index, pane_index)
       WHERE status = 'active';
+    CREATE INDEX IF NOT EXISTS idx_android_devices_user
+      ON android_devices(user_id, is_active, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_android_devices_active_fcm
+      ON android_devices(user_id, fcm_token_hash) WHERE is_active = 1;
+    CREATE INDEX IF NOT EXISTS idx_android_notifications_expiry
+      ON android_notifications(device_id, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_supervisor_grants_token_hash
+      ON supervisor_grants(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_supervisor_grants_expiry
+      ON supervisor_grants(user_id, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_thread_snapshot_cache_lru
+      ON thread_snapshot_cache(user_id, last_accessed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_thread_snapshot_cache_expiry
+      ON thread_snapshot_cache(expires_at);
   `);
+
+  ensureSupervisorGrantColumns(db);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS supervisor_message_requests (
+      grant_id TEXT NOT NULL REFERENCES supervisor_grants(id) ON DELETE CASCADE,
+      client_message_id TEXT NOT NULL,
+      text_sha256 TEXT NOT NULL,
+      text_length INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('processing', 'accepted', 'failed')),
+      turn_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (grant_id, client_message_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_supervisor_message_requests_status
+      ON supervisor_message_requests(grant_id, status, updated_at);
+  `);
+}
+
+function ensureSupervisorGrantColumns(db: DatabaseSync) {
+  const columns = new Set(
+    db
+      .prepare("PRAGMA table_info(supervisor_grants)")
+      .all()
+      .map((row) => String(row.name)),
+  );
+  if (!columns.has("permissions_json")) {
+    db.exec(`
+      ALTER TABLE supervisor_grants
+      ADD COLUMN permissions_json TEXT NOT NULL
+      DEFAULT '["thread.history.read","thread.events.read"]'
+    `);
+  }
+  if (!columns.has("is_persistent")) {
+    db.exec(`
+      ALTER TABLE supervisor_grants
+      ADD COLUMN is_persistent INTEGER NOT NULL DEFAULT 0
+    `);
+  }
 }

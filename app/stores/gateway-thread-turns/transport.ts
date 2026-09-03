@@ -28,6 +28,7 @@ export function requestTurnStart(input: {
       cwd: input.cwd ?? undefined,
       model: input.options.model === "" ? undefined : input.options.model,
       effort: input.options.effort === "" ? undefined : input.options.effort,
+      serviceTier: input.options.serviceTier === "" ? undefined : input.options.serviceTier,
       approvalPolicy: input.options.approvalPolicy ?? undefined,
       collaborationMode: input.options.collaborationMode ?? undefined,
       images: input.options.images ?? [],
@@ -45,6 +46,7 @@ export function requestTurnSteer(input: {
   expectedTurnId: string;
   text: string;
   clientUserMessageId: string;
+  cwd: string | null;
   options: ComposerTurnOptions;
 }) {
   return useGatewayRealtimeStore().request(
@@ -57,6 +59,7 @@ export function requestTurnSteer(input: {
       expectedTurnId: input.expectedTurnId,
       text: input.text,
       clientUserMessageId: input.clientUserMessageId,
+      cwd: input.cwd ?? undefined,
       images: input.options.images ?? [],
       references: input.options.references ?? [],
     }),

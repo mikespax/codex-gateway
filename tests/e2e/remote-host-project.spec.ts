@@ -21,6 +21,28 @@ import {
   waitForSelectedThreadId,
 } from "./helpers/remote-codex";
 
+test("starts a new thread from the global sidebar button on the selected host", async ({
+  page,
+  remoteWorkspace,
+}) => {
+  await installRealtimeSocketProbe(page);
+  await openApp(page);
+  const host = await remoteWorkspace.addHost(`global-new-thread-host-${Date.now()}`);
+
+  const realtimeOffset = await realtimeClientMessageCount(page);
+  await page.getByTestId("new-thread-button").click();
+  await expect(page.getByTestId(`new-thread-host-option-${host.id}`)).toBeVisible();
+  await page.getByTestId(`new-thread-host-option-${host.id}`).click();
+
+  const startRequest = await waitForRealtimeClientMessage(page, "thread.start", realtimeOffset);
+  expect(startRequest).toMatchObject({
+    hostId: host.id,
+    projectId: null,
+  });
+  await waitForSelectedThreadId(page);
+  await expect(page.getByPlaceholder(/Ask for follow-up changes|输入后续修改要求/)).toBeEnabled();
+});
+
 test("references real project files as structured turn context", async ({
   page,
   remoteWorkspace,

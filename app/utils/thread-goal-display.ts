@@ -12,37 +12,37 @@ export interface ThreadGoalStatusPresentation {
 // whole affordance atomically instead of leaving a red badge inside an apparently active strip.
 const THREAD_GOAL_STATUS_PRESENTATION = {
   active: {
-    triggerClass: "border-primary/25 bg-primary/5 hover:border-primary/45 hover:bg-primary/10",
+    triggerClass: "border-primary/55 bg-primary/10 hover:border-primary/75 hover:bg-primary/15",
     labelClass: "text-primary",
     badgeClass: "border-primary/30 bg-primary/10 text-primary",
   },
   paused: {
     triggerClass:
-      "border-ink-faint/30 bg-ink-faint/10 hover:border-ink-faint/50 hover:bg-ink-faint/15",
+      "border-ink-faint/55 bg-ink-faint/10 hover:border-ink-faint/75 hover:bg-ink-faint/15",
     labelClass: "text-ink-muted",
     badgeClass: "border-ink-faint/35 bg-ink-faint/10 text-ink-muted",
   },
   blocked: {
     triggerClass:
-      "border-destructive/30 bg-destructive/10 hover:border-destructive/50 hover:bg-destructive/15",
+      "border-destructive/60 bg-destructive/10 hover:border-destructive/80 hover:bg-destructive/15",
     labelClass: "text-destructive",
     badgeClass: "border-destructive/35 bg-destructive/10 text-destructive",
   },
   usageLimited: {
     triggerClass:
-      "border-accent-orange/30 bg-accent-orange/10 hover:border-accent-orange/50 hover:bg-accent-orange/15",
+      "border-accent-orange/60 bg-accent-orange/10 hover:border-accent-orange/80 hover:bg-accent-orange/15",
     labelClass: "text-accent-orange-deep",
     badgeClass: "border-accent-orange/35 bg-accent-orange/10 text-accent-orange-deep",
   },
   budgetLimited: {
     triggerClass:
-      "border-accent-brown/30 bg-accent-brown/10 hover:border-accent-brown/50 hover:bg-accent-brown/15",
+      "border-accent-brown/60 bg-accent-brown/10 hover:border-accent-brown/80 hover:bg-accent-brown/15",
     labelClass: "text-accent-brown",
     badgeClass: "border-accent-brown/35 bg-accent-brown/10 text-accent-brown",
   },
   complete: {
     triggerClass:
-      "border-accent-green/30 bg-accent-green/10 hover:border-accent-green/50 hover:bg-accent-green/15",
+      "border-accent-green/60 bg-accent-green/10 hover:border-accent-green/80 hover:bg-accent-green/15",
     labelClass: "text-accent-green",
     badgeClass: "border-accent-green/35 bg-accent-green/10 text-accent-green",
   },

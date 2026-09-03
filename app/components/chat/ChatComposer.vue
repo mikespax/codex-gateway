@@ -1,16 +1,20 @@
 <script setup lang="ts">
+import { nextTick, onMounted, ref, watch } from "vue";
 import ComposerShell from "@/components/chat/composer/ComposerShell.vue";
 import { useComposerController } from "@/composables/composer/useComposerController";
 
 const {
   activeEffortCompactLabel,
   activeEffortValue,
+  activeServiceTier,
+  activeServiceTierLabel,
   activeModel,
   activeModelLabel,
   activePlanSummary,
   attachedFiles,
   fileReferences,
   canInterruptTurn,
+  canStopTurn,
   canUsePrimaryAction,
   composerInputEnabled,
   deactivatePlanMode,
@@ -20,8 +24,10 @@ const {
   goalInputActive,
   handleAttachmentChange,
   handleComposerKeydown,
+  handleDrop,
   handlePaste,
   handlePrimaryAction,
+  interruptTurn,
   hasComposerInput,
   interruptingTurn,
   isThreadRunning,
@@ -33,7 +39,6 @@ const {
   removeAttachment,
   runSlashCommand,
   selectSlashCommandIndex,
-  selectedApprovalMode,
   selectedSlashCommandIndex,
   selectedThreadGoal,
   selectedThreadGoalObservedAt,
@@ -41,23 +46,39 @@ const {
   selectedProjectId,
   selectedThreadStatus,
   selectedThreadTokenUsage,
+  serviceTierOptions,
   sendButtonLabel,
   saveSelectedThreadGoal,
   stopSelectedThreadGoal,
   resumeSelectedThreadGoal,
   clearSelectedThreadGoal,
-  setSelectedApprovalMode,
-  setSelectedEffort,
-  setSelectedModel,
+  applySelectedModelEffort,
   slashMenuOpen,
   turnText,
   uploadingAttachments,
   handleFileReferenceLimit,
 } = useComposerController();
+
+const composerShell = ref<InstanceType<typeof ComposerShell> | null>(null);
+
+function focusDesktopComposer() {
+  if (!window.matchMedia("(min-width: 48rem)").matches) return;
+  void nextTick(() => {
+    window.requestAnimationFrame(() => composerShell.value?.focusEditor());
+  });
+}
+
+watch(selectedThreadId, (threadId, previousThreadId) => {
+  if (threadId === null || threadId === previousThreadId) return;
+  focusDesktopComposer();
+});
+
+onMounted(focusDesktopComposer);
 </script>
 
 <template>
   <ComposerShell
+    ref="composerShell"
     v-model="turnText"
     v-model:file-references="fileReferences"
     :attached-files="attachedFiles"
@@ -74,7 +95,6 @@ const {
     :uploading-attachments="uploadingAttachments"
     :selected-thread-id="selectedThreadId"
     :selected-project-id="selectedProjectId"
-    :selected-approval-mode="selectedApprovalMode"
     :selected-thread-token-usage="selectedThreadTokenUsage"
     :models="models"
     :loading-models="loadingModels"
@@ -82,12 +102,16 @@ const {
     :active-model-label="activeModelLabel"
     :active-effort-value="activeEffortValue"
     :active-effort-compact-label="activeEffortCompactLabel"
+    :active-service-tier="activeServiceTier"
+    :active-service-tier-label="activeServiceTierLabel"
     :effort-options="effortOptions"
+    :service-tier-options="serviceTierOptions"
     :label-effort-option="labelEffortOption"
     :model-option-value="modelOptionValue"
     :has-composer-input="hasComposerInput"
     :is-thread-running="isThreadRunning"
     :can-interrupt-turn="canInterruptTurn"
+    :can-stop-turn="canStopTurn"
     :can-use-primary-action="canUsePrimaryAction"
     :interrupting-turn="interruptingTurn"
     :selected-thread-status="selectedThreadStatus"
@@ -100,13 +124,13 @@ const {
     @hover-slash-command="selectSlashCommandIndex"
     @select-slash-command="runSlashCommand"
     @attachment-change="handleAttachmentChange"
+    @drop="handleDrop"
     @paste="handlePaste"
     @remove-attachment="removeAttachment"
     @keydown="handleComposerKeydown"
     @file-reference-limit="handleFileReferenceLimit"
     @primary-action="handlePrimaryAction"
-    @update-selected-approval-mode="setSelectedApprovalMode"
-    @select-model="setSelectedModel"
-    @select-effort="setSelectedEffort"
+    @interrupt-turn="interruptTurn"
+    @apply-model-effort="applySelectedModelEffort"
   />
 </template>

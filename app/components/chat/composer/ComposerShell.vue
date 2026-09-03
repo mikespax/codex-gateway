@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import type {
-  ApprovalPolicy,
   ModelRecord,
   ReasoningEffort,
   ThreadGoal,
@@ -35,7 +34,6 @@ const props = defineProps<{
   uploadingAttachments: boolean;
   selectedThreadId: string | null;
   selectedProjectId: number | null;
-  selectedApprovalMode: ApprovalPolicy | "custom";
   selectedThreadTokenUsage: ThreadTokenUsageState | null;
   models: ModelRecord[];
   loadingModels: boolean;
@@ -43,12 +41,16 @@ const props = defineProps<{
   activeModelLabel: string;
   activeEffortValue: string;
   activeEffortCompactLabel: string;
+  activeServiceTier: string;
+  activeServiceTierLabel: string;
   effortOptions: Array<{ value: ReasoningEffort; label?: string }>;
+  serviceTierOptions: Array<{ value: string; label: string; description?: string | null }>;
   labelEffortOption: (option: { value: ReasoningEffort; label?: string }) => string;
   modelOptionValue: (modelOption: { model?: string; id: string }) => string;
   hasComposerInput: boolean;
   isThreadRunning: boolean;
   canInterruptTurn: boolean;
+  canStopTurn: boolean;
   canUsePrimaryAction: boolean;
   interruptingTurn: boolean;
   selectedThreadStatus: ThreadRuntimeStatus;
@@ -66,20 +68,109 @@ const emit = defineEmits<{
   hoverSlashCommand: [index: number];
   selectSlashCommand: [command: SlashMenuItem];
   attachmentChange: [event: Event];
+  drop: [event: DragEvent];
   paste: [event: ClipboardEvent];
   removeAttachment: [id: string];
   keydown: [event: KeyboardEvent];
   fileReferenceLimit: [message: string];
   primaryAction: [];
-  updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
-  selectModel: [model: string];
-  selectEffort: [effort: ReasoningEffort];
+  interruptTurn: [];
+  applyModelEffort: [selection: { model: string; effort: ReasoningEffort; serviceTier: string }];
 }>();
 
-const uploadInput = ref<HTMLInputElement | null>(null);
+const composerEditor = ref<InstanceType<typeof ComposerEditor> | null>(null);
+const documentUploadInput = ref<HTMLInputElement | null>(null);
+const mediaUploadInput = ref<HTMLInputElement | null>(null);
+const isDraggingFiles = ref(false);
+const keyboardInset = ref(0);
+let restingVisualViewportHeight = 0;
+let visualViewport: VisualViewport | null = null;
 
-function openAttachmentPicker() {
-  uploadInput.value?.click();
+function syncKeyboardInset() {
+  const viewport = visualViewport;
+  if (!viewport) return;
+
+  const viewportHeight = viewport.height;
+  const layoutHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
+  const coveredHeight = Math.max(0, layoutHeight - viewportHeight - viewport.offsetTop);
+  const heightDelta = Math.max(0, restingVisualViewportHeight - viewportHeight);
+  const keyboardVisible = Math.max(coveredHeight, heightDelta) > 80;
+
+  if (!keyboardVisible) {
+    restingVisualViewportHeight = viewportHeight;
+    keyboardInset.value = 0;
+    return;
+  }
+
+  // resizes-content browsers already move the app above the keyboard, so retain a comfortable
+  // 1rem gap. Overlaying browsers additionally need their covered visual-viewport height.
+  keyboardInset.value = Math.max(16, Math.round(coveredHeight) + 16);
+}
+
+onMounted(() => {
+  visualViewport = window.visualViewport;
+  if (!visualViewport) return;
+  restingVisualViewportHeight = visualViewport.height;
+  visualViewport.addEventListener("resize", syncKeyboardInset);
+  visualViewport.addEventListener("scroll", syncKeyboardInset);
+});
+
+onBeforeUnmount(() => {
+  visualViewport?.removeEventListener("resize", syncKeyboardInset);
+  visualViewport?.removeEventListener("scroll", syncKeyboardInset);
+  visualViewport = null;
+});
+
+function openAttachmentPicker(kind: "documents" | "media") {
+  if (kind === "documents") documentUploadInput.value?.click();
+  else mediaUploadInput.value?.click();
+}
+
+function focusEditor() {
+  composerEditor.value?.focus();
+}
+
+defineExpose({ focusEditor });
+
+function dragContainsFiles(event: DragEvent) {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+function handleDragEnter(event: DragEvent) {
+  if (!dragContainsFiles(event)) return;
+  event.preventDefault();
+  isDraggingFiles.value = true;
+}
+
+function handleDragOver(event: DragEvent) {
+  if (!dragContainsFiles(event)) return;
+  event.preventDefault();
+  isDraggingFiles.value = true;
+}
+
+function handleDragLeave(event: DragEvent) {
+  if (!dragContainsFiles(event)) return;
+  const composer = event.currentTarget;
+  const nextTarget = event.relatedTarget;
+  if (
+    composer instanceof HTMLElement &&
+    nextTarget instanceof Node &&
+    composer.contains(nextTarget)
+  ) {
+    return;
+  }
+  isDraggingFiles.value = false;
+}
+
+function resetDragState() {
+  isDraggingFiles.value = false;
+}
+
+function handleDrop(event: DragEvent) {
+  isDraggingFiles.value = false;
+  if (!dragContainsFiles(event)) return;
+  event.preventDefault();
+  emit("drop", event);
 }
 
 function composerScopeKey() {
@@ -97,7 +188,11 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
 
 <template>
   <div
-    class="shrink-0 bg-gradient-to-t from-surface via-surface to-surface/75 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] md:px-[clamp(1rem,3vw,2rem)] md:pb-[clamp(0.5rem,1.4vh,1rem)]"
+    data-testid="composer-shell"
+    class="shrink-0 bg-gradient-to-t from-surface via-surface to-surface/75 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-[padding,margin] focus-within:pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-[clamp(1rem,3vw,2rem)] md:pb-[clamp(0.5rem,1.4vh,1rem)] md:focus-within:pb-[clamp(0.5rem,1.4vh,1rem)]"
+    :style="{ marginBottom: keyboardInset > 0 ? `${keyboardInset}px` : undefined }"
+    :data-keyboard-inset="keyboardInset"
+    @focusin="syncKeyboardInset"
   >
     <div class="mx-auto w-full max-w-3xl">
       <ComposerModeStrip
@@ -114,7 +209,17 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         @clear-goal="emit('clearGoal')"
       />
       <div
-        class="relative rounded-[1.35rem] border border-hairline bg-surface p-2 shadow-lg shadow-ink/10 md:rounded-3xl md:p-[clamp(0.45rem,1vw,0.7rem)]"
+        data-testid="composer-surface"
+        class="relative rounded-[1.35rem] border border-hairline bg-surface p-2 shadow-lg shadow-ink/10 transition-colors md:rounded-3xl md:p-[clamp(0.45rem,1vw,0.7rem)]"
+        :class="{
+          'border-primary bg-primary/5 shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_25%,transparent)]':
+            isDraggingFiles,
+        }"
+        @dragenter="handleDragEnter"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+        @dragend="resetDragState"
+        @drop="handleDrop"
       >
         <SlashCommandMenu
           :open="slashMenuOpen"
@@ -124,14 +229,32 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           @select="emit('selectSlashCommand', $event)"
         />
         <input
-          ref="uploadInput"
+          ref="documentUploadInput"
+          data-testid="attachment-input"
           class="hidden"
           type="file"
           multiple
+          accept="application/*,text/*,.zip,.7z,.rar,.tar,.gz,.bz2,.xz,.md,.yaml,.yml,.toml,.env,.log,.patch,.diff"
+          @change="emit('attachmentChange', $event)"
+        />
+        <input
+          ref="mediaUploadInput"
+          data-testid="media-attachment-input"
+          class="hidden"
+          type="file"
+          multiple
+          accept="image/*,video/*"
           @change="emit('attachmentChange', $event)"
         />
         <AttachmentChips :files="attachedFiles" @remove="emit('removeAttachment', $event)" />
+        <div
+          v-if="isDraggingFiles"
+          class="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[1rem] border border-dashed border-primary bg-surface/90 text-sm font-medium text-primary"
+        >
+          Drop screenshot or file to attach
+        </div>
         <ComposerEditor
+          ref="composerEditor"
           :key="composerScopeKey()"
           :model-value="modelValue"
           :references="fileReferences"
@@ -149,7 +272,6 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         <ComposerToolbar
           :uploading-attachments="uploadingAttachments"
           :selected-thread-id="selectedThreadId"
-          :selected-approval-mode="selectedApprovalMode"
           :selected-thread-token-usage="selectedThreadTokenUsage"
           :models="models"
           :loading-models="loadingModels"
@@ -157,21 +279,24 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           :active-model-label="activeModelLabel"
           :active-effort-value="activeEffortValue"
           :active-effort-compact-label="activeEffortCompactLabel"
+          :active-service-tier="activeServiceTier"
+          :active-service-tier-label="activeServiceTierLabel"
           :effort-options="effortOptions"
+          :service-tier-options="serviceTierOptions"
           :label-effort-option="labelEffortOption"
           :model-option-value="modelOptionValue"
           :has-composer-input="hasComposerInput"
           :is-thread-running="isThreadRunning"
           :can-interrupt-turn="canInterruptTurn"
+          :can-stop-turn="canStopTurn"
           :can-use-primary-action="canUsePrimaryAction"
           :interrupting-turn="interruptingTurn"
           :selected-thread-status="selectedThreadStatus"
           :send-button-label="sendButtonLabel"
           @attach="openAttachmentPicker"
           @primary-action="emit('primaryAction')"
-          @update-selected-approval-mode="emit('updateSelectedApprovalMode', $event)"
-          @select-model="emit('selectModel', $event)"
-          @select-effort="emit('selectEffort', $event)"
+          @interrupt-turn="emit('interruptTurn')"
+          @apply-model-effort="emit('applyModelEffort', $event)"
         />
       </div>
     </div>

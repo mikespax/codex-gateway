@@ -98,7 +98,7 @@ watch(
         type="button"
         data-testid="composer-goal-summary"
         :data-goal-status="goal.status"
-        class="flex w-full min-w-0 items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm text-ink shadow-sm shadow-ink/5 transition md:text-base"
+        class="gateway-goal-summary flex w-full min-w-0 items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm text-ink shadow-sm shadow-ink/5 transition md:text-base"
         :class="statusPresentation.triggerClass"
       >
         <span class="shrink-0 font-medium" :class="statusPresentation.labelClass">

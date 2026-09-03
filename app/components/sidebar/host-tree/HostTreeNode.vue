@@ -45,7 +45,12 @@ const controller = requireHostTreeController();
           />
           <ChevronRightIcon v-else class="size-3.5 shrink-0 text-ink-muted" />
           <ServerIcon class="size-4 shrink-0" />
-          <SidebarRowLabel :title="host.name" :subtitle="host.sshHost">
+          <SidebarRowLabel
+            :title="host.name"
+            :subtitle="
+              [controller.hostResourceUsage(host.id), host.sshHost].filter(Boolean).join(' · ')
+            "
+          >
             <template #trailing>
               <HostStatusIndicator
                 :status="controller.hostConnectionStatuses[host.id]?.status ?? 'idle'"
@@ -111,9 +116,13 @@ const controller = requireHostTreeController();
                 controller.threadCompletionAttention(project.hostId, String(thread.id))
               "
               :subtitle="formatRelative(thread.updatedAt)"
+              :resource-usage="controller.hostResourceUsage(project.hostId)"
               :pin-label="thread.pinned ? $t('app.unpinThread') : $t('app.pinThread')"
               :long-press-handlers="controller.longPressHandlers"
               :show-pinned-icon="thread.pinned"
+              :move-host-label="
+                controller.canMoveThreadToHost ? $t('app.moveThreadToHost') : undefined
+              "
               @open="
                 controller.openThread(String(thread.id), {
                   hostId: project.hostId,
@@ -121,6 +130,9 @@ const controller = requireHostTreeController();
                 })
               "
               @toggle-pin="controller.toggleThreadPin(String(thread.id), !thread.pinned)"
+              @move-host="
+                controller.moveThread({ ...thread, hostId: project.hostId, projectId: project.id })
+              "
               @rename="controller.rename({ ...thread, hostId: project.hostId })"
             />
           </template>

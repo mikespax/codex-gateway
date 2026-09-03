@@ -2,13 +2,12 @@
 import type { GetTabContextMenuItemsParams } from "dockview-vue";
 import { DockviewVue, themeDark, themeLight } from "dockview-vue";
 import { computed, provide, ref, toRefs } from "vue";
-import BrowserOpenDialog from "@/components/browser/BrowserOpenDialog.vue";
 import { useTerminalTheme } from "@/composables/terminal/useTerminalTheme";
-import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
-import { useTmuxMonitorLauncher } from "@/composables/workspace/useTmuxMonitorLauncher";
 import { useChatWorkspaceState } from "../chat-workspace-state";
 import { fileWorkspaceScopeKey } from "@/stores/file-workspace";
+import { useGatewayFileWorkspaceStore } from "@/stores/file-workspace";
 import { workspaceLayoutScopeKey } from "@/stores/gateway-workspace-layout";
+import { titleForThread } from "@/stores/gateway/thread-utils/identity";
 import MobileWorkspaceHeader from "../MobileWorkspaceHeader.vue";
 import { createDockTabMenu } from "./actions";
 import { WORKSPACE_DOCK_UI_CONTEXT, WORKSPACE_FILES_PANEL_CONTEXT } from "./context";
@@ -21,6 +20,7 @@ import "dockview-vue/dist/styles/dockview.css";
 const props = defineProps<WorkspaceDockProps>();
 const refs = toRefs(props);
 const workspace = useChatWorkspaceState();
+const fileWorkspace = useGatewayFileWorkspaceStore();
 const { t } = useI18n();
 const { isDark } = useTerminalTheme();
 const scopeKey = computed(() =>
@@ -43,22 +43,31 @@ const {
   selectedProjectId: workspace.selectedProjectId,
   selectedThreadId: workspace.selectedThreadId,
 });
+const fileRequestScopeKey = computed(() =>
+  workspace.selectedHostId.value && workspace.selectedThreadId.value
+    ? fileWorkspaceScopeKey(workspace.selectedHostId.value, workspace.selectedThreadId.value)
+    : null,
+);
+const filesPanelOpen = computed(
+  () => fileWorkspace.workspaceOpenRequest?.scopeKey === fileRequestScopeKey.value,
+);
+const agentPanelTitle = computed(() =>
+  workspace.currentThread.value ? titleForThread(workspace.currentThread.value) : t("app.agentTab"),
+);
 const panels = useWorkspaceDockPanels({
-  selectedThreadId: workspace.selectedThreadId,
+  agentPanelTitle,
   terminalPanels,
   subAgentPanels,
   browserPanels,
   tmuxPanels,
   hostMetricsPanel,
   gitReviewPanel,
+  filesPanelOpen,
   scopeKey,
 });
-const fileRequestScopeKey = computed(() =>
-  workspace.selectedHostId.value && workspace.selectedThreadId.value
-    ? fileWorkspaceScopeKey(workspace.selectedHostId.value, workspace.selectedThreadId.value)
-    : null,
-);
 const panelIds = computed(() => [
+  agentPanelTitle.value,
+  filesPanelOpen.value,
   terminalPanels.value.map(({ id }) => id),
   subAgentPanels.value.map(({ id }) => id),
   browserPanels.value.map(({ id }) => id),
@@ -66,14 +75,12 @@ const panelIds = computed(() => [
   hostMetricsPanel.value.map(({ id }) => id),
   gitReviewPanel.value.map(({ id }) => id),
 ]);
-const browserDialogOpen = ref(false);
 const dockviewHost = ref<HTMLElement | null>(null);
-const workspaceActions = useWorkspaceLaunchActions();
-const tmuxLauncher = useTmuxMonitorLauncher();
 const lifecycle = useWorkspaceDockLifecycle({
   scopeKey,
   host: dockviewHost,
   fileRequestScopeKey,
+  filesPanelOpen,
   reconcile: panels.reconcile,
   defaultLayout: panels.defaultLayout,
   panelIds,
@@ -115,15 +122,7 @@ function tabContextMenu({ panel, api }: GetTabContextMenuItemsParams) {
     data-testid="workspace-dock-frame"
     class="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
   >
-    <MobileWorkspaceHeader
-      v-if="layout === 'mobile'"
-      :can-open-terminal="workspace.canOpenTerminal.value"
-      :tmux-active-count="tmuxLauncher.activeCount.value"
-      @open-tmux="tmuxLauncher.open"
-      @open-terminal="workspaceActions.openTerminal"
-      @open-browser="browserDialogOpen = true"
-      @open-host-monitor="workspaceActions.openHostMonitor"
-    >
+    <MobileWorkspaceHeader v-if="layout === 'mobile'" :host-id="workspace.selectedHostId.value">
       <template #start><slot name="mobile-header-start" /></template>
     </MobileWorkspaceHeader>
     <!--
@@ -146,11 +145,6 @@ function tabContextMenu({ panel, api }: GetTabContextMenuItemsParams) {
         @ready="lifecycle.ready"
       />
     </div>
-    <BrowserOpenDialog
-      v-if="layout === 'mobile'"
-      v-model:open="browserDialogOpen"
-      :open-target="workspaceActions.openBrowser"
-    />
   </div>
 </template>
 

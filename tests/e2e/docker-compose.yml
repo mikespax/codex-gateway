@@ -45,20 +45,25 @@ services:
 
   build-runner:
     image: codex-gateway-e2e-runner
-    mem_limit: 2g
+    # Keep CI and constrained hosts bounded by default. Local runs can opt into a larger, still
+    # explicit cgroup using E2E_BUILD_MEMORY_LIMIT (for example, 4g).
+    mem_limit: ${E2E_BUILD_MEMORY_LIMIT:-2g}
     build:
       context: ../..
       dockerfile: tests/e2e/runner.Dockerfile
     environment:
       # Keep enough cgroup headroom for Rolldown/Nitro native allocations while allowing the
-      # JavaScript heap to finish the production bundle. The container remains capped at 2 GiB.
-      NODE_OPTIONS: --max-old-space-size=1536
+      # JavaScript heap to finish the production bundle. Keep this aligned with the explicit
+      # E2E_BUILD_MEMORY_LIMIT override when increasing the local build budget.
+      NODE_OPTIONS: ${E2E_BUILD_NODE_OPTIONS:---max-old-space-size=1536}
       CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway.db
       E2E_GATEWAY_USERNAME: ${E2E_GATEWAY_USERNAME:-e2e}
       E2E_GATEWAY_PASSWORD: ${E2E_GATEWAY_PASSWORD:-codex-gateway-e2e-password}
     volumes:
       - build-output:/e2e-output
       - e2e-data:/workspace/codex-gateway/.data-e2e
+      # Only disposable Vite/Nuxt transforms persist between runs; .nuxt and .output are rebuilt.
+      - e2e-nuxt-vite-cache:/workspace/codex-gateway/node_modules/.cache
 
   gateway-under-test:
     image: codex-gateway-e2e-runner
@@ -153,3 +158,4 @@ volumes:
   build-output:
   e2e-data:
   runner-home:
+  e2e-nuxt-vite-cache:

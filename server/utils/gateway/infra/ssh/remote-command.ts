@@ -16,6 +16,9 @@ function codexPathBootstrap(options: { requireCodex: boolean }) {
   return [
     'codex_gateway_path_add() { if [ -d "$1" ]; then case ":$PATH:" in *":$1:"*) ;; *) PATH="$PATH:$1" ;; esac; fi; };',
     'for dir in "${CODEX_INSTALL_DIR:-$HOME/.local/bin}" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/.bun/bin" "$HOME/.nvm/current/bin" "$HOME/.nvm/versions/node"/*/bin /opt/homebrew/bin /opt/node/bin /usr/local/bin /usr/bin; do codex_gateway_path_add "$dir"; done; export PATH;',
+    // Older macOS SSH sessions can inherit a low descriptor limit; a Codex
+    // app-server needs more than that to index an established session store.
+    'if [ "$(ulimit -Sn 2>/dev/null || echo 0)" -lt 8192 ] 2>/dev/null; then ulimit -n 8192 2>/dev/null || true; fi;',
     modernNodePathBootstrap(),
     'CODEX_BIN="$(command -v codex 2>/dev/null || true)";',
     'if [ -z "$CODEX_BIN" ] && [ -x "${CODEX_INSTALL_DIR:-$HOME/.local/bin}/codex" ]; then CODEX_BIN="${CODEX_INSTALL_DIR:-$HOME/.local/bin}/codex"; fi;',
@@ -137,6 +140,16 @@ if [ -z "$pid" ] && command -v fuser >/dev/null 2>&1; then
   pid="$(fuser "$socket" 2>/dev/null | tr ' ' '\\n' | sed '/^$/d' | head -n 1 || true)"
 fi
 if [ -z "$pid" ]; then
+  if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] && command -v lsof >/dev/null 2>&1; then
+    pid="$(lsof -nP -a -U -Fn -- "$socket" 2>/dev/null | sed -n 's/^p//p' | head -n 1 || true)"
+  fi
+fi
+if [ -z "$pid" ]; then
+  if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
+    # macOS has no /proc/net/unix; if lsof found no owner, this is a stale socket.
+    rm -f "$socket"
+    exit 0
+  fi
   echo "Unable to identify unmanaged app-server PID for $socket" >&2
   exit 1
 fi
@@ -236,6 +249,10 @@ codex_gateway_socket_has_listener() {
   fi
   if [ -r /proc/net/unix ]; then
     awk -v socket="$socket" '$NF == socket && $4 == "00010000" { found = 1 } END { exit found ? 0 : 1 }' /proc/net/unix
+    return $?
+  fi
+  if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] && command -v lsof >/dev/null 2>&1; then
+    lsof -nP -a -U -Fn -- "$socket" 2>/dev/null | grep -q '^p'
     return $?
   fi
   return 0

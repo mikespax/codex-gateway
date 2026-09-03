@@ -29,7 +29,7 @@ const projectedHistoryTurnSchema = z
     durationMs: z.number().nullish(),
   })
   .loose();
-const threadHistorySchema = z
+export const threadHistorySchema = z
   .object({
     thread: z
       .object({
@@ -53,7 +53,7 @@ const gatewayEventSchema = z
     createdAt: nonEmptyString,
   })
   .strict();
-const turnsPageStateSchema = z
+export const turnsPageStateSchema = z
   .object({
     nextCursor: z.string().nullable(),
     backwardsCursor: z.string().nullable(),
@@ -88,10 +88,11 @@ const tmuxSessionsSnapshotFields = {
   error: z.string().nullable(),
   scannedAt: nonEmptyString,
 };
-const threadSettingsSchema = z
+export const threadSettingsSchema = z
   .object({
     model: nullableString,
     effort: nullableString,
+    serviceTier: nullableString,
     approvalPolicy: z.enum(["untrusted", "on-request", "never"]).nullable().optional(),
     collaborationMode: z
       .object({
@@ -127,7 +128,7 @@ const tokenUsageBreakdownSchema = z
     reasoningOutputTokens: nonNegativeId,
   })
   .strict();
-const tokenUsageSchema = z
+export const tokenUsageSchema = z
   .object({
     total: tokenUsageBreakdownSchema,
     last: tokenUsageBreakdownSchema,

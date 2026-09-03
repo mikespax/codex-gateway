@@ -186,6 +186,7 @@ async function executeStoredTurnRequest(t: Translate, request: SubmittedTurnRequ
     expectedTurnId: activeTurnId,
     text: request.text,
     clientUserMessageId: createClientUserMessageId("steer"),
+    cwd: request.cwd,
     options: request.options,
   });
 }

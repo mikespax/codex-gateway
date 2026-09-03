@@ -18,35 +18,34 @@ export function useRecentThreadActivity() {
   const runtime = useGatewayThreadRuntimeStore();
   const threadView = useGatewayThreadViewStore();
   const activity = useGatewayThreadActivityStore();
-  const { summariesByKey, observedRunningThreadKeys } = storeToRefs(activity);
+  const { summariesByKey } = storeToRefs(activity);
   const { hosts } = storeToRefs(catalog);
   const pinnedThreads = useGatewayPinnedThreads();
   const { threadStatuses, unviewedCompletedThreadKeys } = storeToRefs(runtime);
 
   const recentThreads = computed(() => {
+    const cutoff = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
     const pinnedKeys = new Set(
       pinnedThreads.value.map((thread) => pinnedKey(thread.hostId, thread.threadId)),
     );
     const unviewedKeys = new Set(unviewedCompletedThreadKeys.value);
-    return observedRunningThreadKeys.value
-      .map((key) => summariesByKey.value[key])
+    return Object.values(summariesByKey.value)
       .filter(
         (thread): thread is ThreadActivitySummary =>
-          // app-server parentThreadId is the authoritative sub-agent marker.
-          // Sub-agents stay in their parent workspace rather than flooding this list.
-          thread !== undefined && !thread.isSubAgent && !pinnedKeys.has(keyFor(thread)),
+          // app-server parentThreadId is the authoritative sub-agent marker. Sub-agents stay in
+          // their parent workspace rather than flooding the cross-host list.
+          !thread.isSubAgent && recentDisplayActivityAt(thread) >= cutoff,
       )
       .map((thread) => ({
         ...thread,
+        ...resolvedProjectFields(thread),
         id: thread.threadId,
         hostName: hosts.value.find((host) => host.id === thread.hostId)?.name ?? null,
         status: threadStatuses.value[keyFor(thread)] ?? "idle",
         completionAttention: unviewedKeys.has(keyFor(thread)),
+        pinned: pinnedKeys.has(keyFor(thread)),
       }))
-      .sort((left, right) => {
-        const runningOrder = Number(right.status === "running") - Number(left.status === "running");
-        return runningOrder || right.updatedAt - left.updatedAt;
-      });
+      .sort(compareRecentThreads);
   });
 
   function openRecentThread(thread: ThreadActivitySummary) {
@@ -56,8 +55,20 @@ export function useRecentThreadActivity() {
     });
   }
 
-  function pinRecentThread(thread: ThreadActivitySummary) {
-    void navigation.setPinnedThread(toPinnedThread(thread), true);
+  function resolvedProjectFields(thread: ThreadActivitySummary) {
+    const project = catalog.projects.find(
+      (candidate) =>
+        candidate.hostId === thread.hostId &&
+        (candidate.id === thread.projectId || candidate.remotePath === thread.cwd),
+    );
+    return {
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? thread.projectName,
+    };
+  }
+
+  function pinRecentThread(thread: ThreadActivitySummary & { pinned: boolean }) {
+    void navigation.setPinnedThread(toPinnedThread(thread), !thread.pinned);
   }
 
   return {
@@ -65,6 +76,22 @@ export function useRecentThreadActivity() {
     openRecentThread,
     pinRecentThread,
   };
+}
+
+function recentDisplayActivityAt(thread: ThreadActivitySummary) {
+  return typeof thread.completionAt === "number" && Number.isFinite(thread.completionAt)
+    ? thread.completionAt
+    : typeof thread.displayActivityAt === "number" && Number.isFinite(thread.displayActivityAt)
+      ? thread.displayActivityAt
+      : thread.updatedAt;
+}
+
+function compareRecentThreads(left: ThreadActivitySummary, right: ThreadActivitySummary) {
+  const byActivity = recentDisplayActivityAt(right) - recentDisplayActivityAt(left);
+  if (byActivity !== 0) return byActivity;
+  const byHost = left.hostId - right.hostId;
+  if (byHost !== 0) return byHost;
+  return left.threadId.localeCompare(right.threadId);
 }
 
 function keyFor(thread: ThreadActivitySummary) {

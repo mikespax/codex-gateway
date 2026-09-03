@@ -22,6 +22,13 @@ export interface ThreadActivitySummary {
   agentRole: string | null;
   isSubAgent: boolean;
   updatedAt: number;
+  /**
+   * Stable display-order baseline. Realtime summaries may update `updatedAt` while a turn is
+   * running, but this marker must not move until `completionAt` records a terminal transition.
+   */
+  displayActivityAt?: number;
+  /** Display-only ordering marker updated only when a running turn becomes terminal. */
+  completionAt?: number;
 }
 
 export interface ThreadActivityMetadata {
@@ -49,8 +56,21 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     }
   }
 
-  function upsertGatewayThread(thread: GatewayThread, projects: ProjectRecord[]) {
-    upsertSummary(summaryFromGatewayThread(thread, projects));
+  function upsertGatewayThread(
+    thread: GatewayThread,
+    projects: ProjectRecord[],
+    options: { preserveActivity?: boolean } = {},
+  ) {
+    const summary = summaryFromGatewayThread(thread, projects);
+    const key = pinnedKey(summary.hostId, summary.threadId);
+    const existing = summariesByKey.value[key];
+    // Opening a chat reads its current snapshot. That is not new activity and must not reorder
+    // the Recent chats list. A completed turn receives its display marker from the runtime
+    // transition, while catalog/realtime updates continue to provide authoritative recency.
+    if (options.preserveActivity === true && existing !== undefined) {
+      summary.updatedAt = existing.updatedAt;
+    }
+    upsertSummary(summary);
   }
 
   function upsertAppServerThread(
@@ -74,7 +94,9 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
       );
       upsertSummary({
         hostId,
-        projectId: record.projectId ?? project?.id ?? null,
+        // App-server metadata can carry a project id from a different Gateway host catalog.
+        // Only retain the id after resolving it against this host (or its matching cwd).
+        projectId: project?.id ?? null,
         threadId: record.id,
         title: firstNonEmptyString([record.title, record.name, record.preview]) ?? record.id,
         cwd: stringOrNull(record.cwd),
@@ -94,11 +116,15 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
   function upsertSummary(summary: ThreadActivitySummary) {
     const key = pinnedKey(summary.hostId, summary.threadId);
     const existing = summariesByKey.value[key];
+    const displayActivityAt = existing?.displayActivityAt ?? summary.updatedAt;
     summariesByKey.value = {
       ...summariesByKey.value,
       [key]: {
         ...existing,
         ...summary,
+        // Keep the display baseline stable across realtime catalog/item updates. The completion
+        // marker is the only event that is allowed to move a row during this page session.
+        displayActivityAt,
         projectId: summary.projectId ?? existing?.projectId ?? null,
         cwd: summary.cwd ?? existing?.cwd ?? null,
         projectName: summary.projectName ?? existing?.projectName ?? null,
@@ -120,6 +146,16 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     // authoritative status may later complete, but the row remains discoverable
     // until a real page/session reset clears this store.
     observedRunningThreadKeys.value = [...observedRunningThreadKeys.value, key];
+  }
+
+  function markTurnCompleted(hostId: number, threadId: string) {
+    const key = pinnedKey(hostId, threadId);
+    const existing = summariesByKey.value[key];
+    if (existing === undefined) return;
+    summariesByKey.value = {
+      ...summariesByKey.value,
+      [key]: { ...existing, completionAt: Math.floor(Date.now() / 1000) },
+    };
   }
 
   function updateTitle(hostId: number, threadId: string, title: string) {
@@ -145,6 +181,7 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
     upsertGatewayThread,
     upsertAppServerThread,
     recordRuntimeStatus,
+    markTurnCompleted,
     updateTitle,
     resetState,
   };
@@ -157,7 +194,7 @@ function summaryFromGatewayThread(
   const project = projects.find(
     (candidate) => candidate.id === thread.projectId && candidate.hostId === thread.hostId,
   );
-  return summaryFromThread(thread.hostId, thread, project, thread.projectId, thread.title);
+  return summaryFromThread(thread.hostId, thread, project, project?.id ?? null, thread.title);
 }
 
 function summaryFromAppServerThread(

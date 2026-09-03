@@ -10,6 +10,160 @@ import {
   seedGatewayThread,
 } from "./helpers/gateway-store";
 
+test("desktop browsers keep in-app notification toasts", async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    driver.publishNotification({
+      key: "e2e-desktop-in-app-notification",
+      title: "Turn finished",
+      body: "Desktop browser notification remains available.",
+      target: { kind: "thread", hostId: 1, projectId: 1, threadId: "desktop-notification" },
+    });
+  });
+
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Turn finished" }),
+  ).toBeVisible();
+});
+
+test("desktop turn completion notifications play one chime and ignore other notifications", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    type AudioTestWindow = Window & { __completionSoundOscillatorStarts?: number };
+    const testWindow = window as AudioTestWindow;
+
+    class FakeAudioParam {
+      setValueAtTime() {}
+      exponentialRampToValueAtTime() {}
+    }
+
+    class FakeOscillator {
+      type = "sine";
+      frequency = new FakeAudioParam();
+      connect() {}
+      start() {
+        testWindow.__completionSoundOscillatorStarts =
+          (testWindow.__completionSoundOscillatorStarts ?? 0) + 1;
+      }
+      stop() {}
+    }
+
+    class FakeGain {
+      gain = new FakeAudioParam();
+      connect() {}
+    }
+
+    class FakeAudioContext {
+      state = "suspended";
+      currentTime = 0;
+      destination = {};
+      async resume() {
+        this.state = "running";
+      }
+      createOscillator() {
+        return new FakeOscillator();
+      }
+      createGain() {
+        return new FakeGain();
+      }
+    }
+
+    Object.defineProperty(window, "AudioContext", {
+      configurable: true,
+      value: FakeAudioContext,
+    });
+  });
+  await openApp(page);
+
+  await page.evaluate(() => {
+    document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    const completed = {
+      key: "thread-terminal:e2e:thread:turn:completed",
+      title: "Turn finished",
+      body: "Completed",
+      target: { kind: "thread" as const, hostId: 1, projectId: 1, threadId: "e2e" },
+    };
+    driver.publishNotification(completed);
+    driver.publishNotification(completed);
+    driver.publishNotification({
+      key: "thread-user-input:e2e:thread:request",
+      title: "Awaiting response",
+      body: "Open the thread",
+      target: { kind: "thread", hostId: 1, projectId: 1, threadId: "e2e" },
+    });
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __completionSoundOscillatorStarts?: number })
+            .__completionSoundOscillatorStarts ?? 0,
+      ),
+    )
+    .toBe(2);
+});
+
+test("background desktop browsers show a native notification for completed turns", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    type NotificationTestWindow = Window & { __desktopNotificationCount?: number };
+    const testWindow = window as NotificationTestWindow;
+
+    class FakeNotification {
+      static permission: NotificationPermission = "granted";
+      static async requestPermission() {
+        return "granted" as NotificationPermission;
+      }
+      onclick: (() => void) | null = null;
+
+      constructor() {
+        testWindow.__desktopNotificationCount = (testWindow.__desktopNotificationCount ?? 0) + 1;
+      }
+
+      close() {}
+    }
+
+    Object.defineProperty(window, "Notification", {
+      configurable: true,
+      value: FakeNotification,
+    });
+    window.localStorage.setItem("codex-gateway.desktop-notifications", "1");
+  });
+  await openApp(page);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    const completed = {
+      key: "thread-terminal:e2e:background:turn:completed",
+      title: "Turn finished",
+      body: "Completed in the background",
+      target: { kind: "thread" as const, hostId: 1, projectId: 1, threadId: "background" },
+    };
+    driver.publishNotification(completed);
+    driver.publishNotification(completed);
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __desktopNotificationCount?: number }).__desktopNotificationCount ??
+          0,
+      ),
+    )
+    .toBe(1);
+});
+
 test("dynamic tool response submits through the server request responder and surfaces failures", async ({
   page,
 }) => {

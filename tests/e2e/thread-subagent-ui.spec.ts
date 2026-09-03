@@ -206,6 +206,12 @@ test("sub-agent activity opens workspace tabs with sub-agent timelines", async (
   await expect(mainPane).toBeHidden();
   await agentWorkspaceTab(page).click();
   await expect(mainPane).toBeVisible();
+  await page.evaluate((childThreadId) => {
+    window.__codexGatewayE2e?.runtime.setThreadStatus(1, childThreadId, "completed");
+  }, subThreadId);
+  await expect(activeAgents.getByTestId("open-active-subagent")).toHaveCount(1);
+  await expect(activeAgents).not.toContainText("Atlas [explorer]");
+  await expect(activeAgents).toContainText("Nova [reviewer]");
   await expect(
     page
       .getByTestId("chat-scroll-area")

@@ -14,6 +14,34 @@ export default defineNuxtConfig({
     // Nuxt 4.5 reuses Vite's watcher instead of opening a second watcher tree.
     watcher: "builder",
   },
+  routeRules: {
+    // HTML shells must always revalidate so a restored mobile tab cannot keep running a retired
+    // deployment. Nuxt assets are content-hashed and remain safe to cache indefinitely.
+    "/**": {
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+      },
+    },
+    "/_nuxt/**": {
+      headers: {
+        "cache-control": "public, max-age=31536000, immutable",
+      },
+    },
+    // Older browser installations may still probe either conventional worker URL. Serve a valid,
+    // non-cached cleanup worker instead of letting Nuxt's HTML fallback occupy that URL.
+    "/sw.js": {
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+        "service-worker-allowed": "/",
+      },
+    },
+    "/service-worker.js": {
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+        "service-worker-allowed": "/",
+      },
+    },
+  },
   css: ["~/assets/css/tailwind.css"],
   modules: ["@pinia/nuxt", "@nuxtjs/device", "@nuxtjs/i18n", "nuxt-echarts"],
   echarts: {
@@ -44,7 +72,7 @@ export default defineNuxtConfig({
     },
   },
   i18n: {
-    defaultLocale: "zh",
+    defaultLocale: "en",
     strategy: "no_prefix",
     detectBrowserLanguage: false,
     locales: [

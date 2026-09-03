@@ -10,7 +10,7 @@ import {
 } from "@codex-gateway/ui/context-menu";
 import type { ThreadRuntimeStatus } from "@/stores/gateway/types";
 import { titleForThread } from "@/stores/gateway/thread-utils/identity";
-import { selectedRowClass } from "../sidebar-utils";
+import { completionAttentionClass, selectedRowClass } from "../sidebar-utils";
 import SidebarRowLabel from "../SidebarRowLabel.vue";
 import ThreadStatusIndicator from "./ThreadStatusIndicator.vue";
 import type { SidebarThreadRow } from "../sidebar-types";
@@ -22,7 +22,10 @@ const props = defineProps<{
   status: ThreadRuntimeStatus;
   completionAttention?: boolean;
   subtitle?: string;
+  resourceUsage?: string | null;
   pinLabel: string;
+  moveLabel?: string;
+  moveHostLabel?: string;
   showPinnedIcon?: boolean;
   longPressHandlers?: Record<string, unknown>;
 }>();
@@ -30,10 +33,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [];
   togglePin: [];
+  move: [];
+  moveHost: [];
   rename: [];
 }>();
 
 const pressHandlers = computed(() => props.longPressHandlers ?? {});
+const displaySubtitle = computed(() =>
+  [props.subtitle, props.resourceUsage]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .join(" · "),
+);
 </script>
 
 <template>
@@ -43,12 +53,17 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
         :data-testid="testId"
         v-bind="pressHandlers"
         :data-selected="selected ? 'true' : 'false'"
+        :aria-current="selected ? 'page' : undefined"
+        :data-completion-attention="completionAttention ? 'true' : 'false'"
         variant="ghost"
-        class="h-auto min-h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 py-2 text-sm font-normal hover:bg-surface"
-        :class="selectedRowClass(selected)"
+        class="h-auto min-h-11 w-full min-w-0 touch-manipulation justify-start overflow-hidden rounded-lg px-3 py-2.5 text-[0.9375rem] font-normal hover:bg-surface sm:min-h-9 sm:px-3 sm:py-2 sm:text-sm"
+        :class="[
+          selectedRowClass(selected),
+          completionAttentionClass(completionAttention === true),
+        ]"
         @click="emit('open')"
       >
-        <SidebarRowLabel :title="titleForThread(thread)" :subtitle="subtitle">
+        <SidebarRowLabel :title="titleForThread(thread)" :subtitle="displaySubtitle || undefined">
           <template #title-prefix>
             <StarIcon
               v-if="showPinnedIcon"
@@ -64,6 +79,12 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
     <ContextMenuContent :collision-padding="12" prioritize-position class="w-40">
       <ContextMenuItem @select="emit('togglePin')">
         {{ pinLabel }}
+      </ContextMenuItem>
+      <ContextMenuItem v-if="moveLabel" @select="emit('move')">
+        {{ moveLabel }}
+      </ContextMenuItem>
+      <ContextMenuItem v-if="moveHostLabel" @select="emit('moveHost')">
+        {{ moveHostLabel }}
       </ContextMenuItem>
       <ContextMenuItem @select="emit('rename')">
         {{ $t("app.renameThread") }}
