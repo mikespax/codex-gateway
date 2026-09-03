@@ -548,6 +548,7 @@ function startNewThread(hostId: number) {
     <ThreadMoveDialog
       :open="threadMove !== null"
       :source-host-id="threadMove?.hostId ?? 0"
+      :source-thread-id="threadMove?.threadId ?? ''"
       :source-title="threadMove?.title ?? ''"
       :source-cwd="threadMove?.sourceCwd ?? null"
       :hosts="hosts"

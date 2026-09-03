@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { HostRecord, ProjectRecord } from "~~/shared/types";
+import type {
+  HostRecord,
+  ProjectRecord,
+  ThreadMoveReadiness,
+  ThreadMoveReadinessStatus,
+} from "~~/shared/types";
 import { Button } from "@codex-gateway/ui/button";
 import {
   Dialog,
@@ -12,6 +17,8 @@ import {
 } from "@codex-gateway/ui/dialog";
 import { Input } from "@codex-gateway/ui/input";
 import { Label } from "@codex-gateway/ui/label";
+import { gatewayApi } from "@/utils/gateway-api";
+import { messageFromError } from "@/stores/gateway/thread-utils/identity";
 import {
   Select,
   SelectContent,
@@ -23,6 +30,7 @@ import {
 const props = defineProps<{
   open: boolean;
   sourceHostId: number;
+  sourceThreadId: string;
   sourceTitle: string;
   sourceCwd: string | null;
   hosts: HostRecord[];
@@ -42,26 +50,53 @@ const targetHostId = ref<number | null>(null);
 const targetProjectId = ref<number | null>(null);
 const targetProjectChoice = ref<"custom" | "preset" | string>("custom");
 const targetCwd = ref("");
+const readiness = ref<ThreadMoveReadiness | null>(null);
+const readinessLoading = ref(false);
+const readinessError = ref("");
+const preparing = ref(false);
+let readinessRequestId = 0;
 const targetHosts = computed(() => props.hosts.filter((host) => host.id !== props.sourceHostId));
 const targetHost = computed(() => props.hosts.find((host) => host.id === targetHostId.value));
 const targetProjects = computed(() =>
   props.projects.filter((project) => project.hostId === targetHostId.value),
 );
-const recommendedTargetPath = computed(() => presetPathForHost(targetHost.value));
+const recommendedTargetPath = computed(() => presetPathForHost(targetHost.value, props.sourceCwd));
 const targetProjectSelectValue = computed(() =>
   targetProjectId.value === null ? targetProjectChoice.value : String(targetProjectId.value),
 );
 const canSubmit = computed(
+  () => !props.submitting && !readinessLoading.value && readiness.value?.status === "ready",
+);
+const canPrepare = computed(
   () =>
     !props.submitting &&
+    !preparing.value &&
+    !readinessLoading.value &&
+    readiness.value?.status === "target_workspace_missing" &&
     targetHostId.value !== null &&
-    (targetProjectId.value !== null || targetCwd.value.trim() !== ""),
+    targetCwd.value.trim().startsWith("/"),
+);
+
+const readinessMessageKey: Record<ThreadMoveReadinessStatus, string> = {
+  ready: "app.moveThreadReadinessReady",
+  source_workspace_missing: "app.moveThreadReadinessSourceWorkspaceMissing",
+  target_workspace_missing: "app.moveThreadReadinessTargetWorkspaceMissing",
+  source_not_git: "app.moveThreadReadinessSourceNotGit",
+  target_not_git: "app.moveThreadReadinessTargetNotGit",
+  repository_mismatch: "app.moveThreadReadinessRepositoryMismatch",
+  source_commit_missing_on_target: "app.moveThreadReadinessSourceCommitMissing",
+};
+
+const { t } = useI18n();
+const readinessMessage = computed(() =>
+  readiness.value === null ? "" : t(readinessMessageKey[readiness.value.status]),
 );
 
 watch(
   () => props.open,
   (open) => {
     if (open) reset();
+    else clearReadiness();
   },
 );
 
@@ -69,8 +104,12 @@ watch(targetHostId, () => {
   configureTarget();
 });
 
-function selectProject(value: string | undefined) {
-  if (value === undefined || value === "custom") {
+watch([targetHostId, targetProjectId, targetCwd, () => props.sourceThreadId], () => {
+  void refreshReadiness();
+});
+
+function selectProject(value: unknown) {
+  if (typeof value !== "string" || value === "custom") {
     targetProjectId.value = null;
     targetProjectChoice.value = "custom";
     if (targetCwd.value.trim() === "") targetCwd.value = props.sourceCwd ?? "";
@@ -110,21 +149,32 @@ function configureTarget(host = targetHost.value) {
   }
 
   targetProjectId.value = null;
-  const presetPath = presetPathForHost(host);
+  const presetPath = presetPathForHost(host, props.sourceCwd);
   targetProjectChoice.value = presetPath === null ? "custom" : "preset";
   targetCwd.value = presetPath ?? props.sourceCwd ?? "";
 }
 
-function presetPathForHost(host: HostRecord | undefined): string | null {
+function presetPathForHost(host: HostRecord | undefined, sourceCwd: string | null): string | null {
   if (host === undefined) return null;
   const name = host.name
     .trim()
     .toLocaleLowerCase()
     .replace(/[^a-z0-9]+/g, " ");
-  if (name.includes("lenovo")) return "/root/.codex";
-  if (name.includes("mac")) return "/Users/Sparks/.codex";
+  const workspaceName = sourceWorkspaceName(sourceCwd);
+  if (name.includes("lenovo")) return `/root/workspaces/${workspaceName}`;
+  if (name.includes("mac")) return `/Users/Sparks/workspaces/${workspaceName}`;
   if (name.includes("vps") || name.includes("contabo")) return "/root";
   return null;
+}
+
+function sourceWorkspaceName(sourceCwd: string | null) {
+  const basename = sourceCwd?.split("/").filter(Boolean).at(-1) ?? "conversation";
+  const safeName = basename
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^\.+/, "")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+  return safeName === "" ? "conversation" : safeName;
 }
 
 function submit() {
@@ -134,6 +184,70 @@ function submit() {
     targetProjectId: targetProjectId.value,
     targetCwd: targetCwd.value.trim() || null,
   });
+}
+
+function clearReadiness() {
+  readinessRequestId += 1;
+  readiness.value = null;
+  readinessLoading.value = false;
+  readinessError.value = "";
+  preparing.value = false;
+}
+
+async function refreshReadiness() {
+  const hostId = targetHostId.value;
+  const cwd = targetCwd.value.trim();
+  if (!props.open || hostId === null || cwd === "" || !cwd.startsWith("/")) {
+    clearReadiness();
+    return;
+  }
+
+  const requestId = ++readinessRequestId;
+  readiness.value = null;
+  readinessError.value = "";
+  readinessLoading.value = true;
+  try {
+    const params = new URLSearchParams({
+      sourceHostId: String(props.sourceHostId),
+      sourceThreadId: props.sourceThreadId,
+      targetHostId: String(hostId),
+      targetCwd: cwd,
+    });
+    const result = await gatewayApi<ThreadMoveReadiness>(
+      `/api/threads/move/readiness?${params.toString()}`,
+    );
+    if (requestId === readinessRequestId) readiness.value = result;
+  } catch (error: unknown) {
+    if (requestId === readinessRequestId) {
+      readinessError.value = messageFromError(error, t("app.moveThreadReadinessFailed"));
+    }
+  } finally {
+    if (requestId === readinessRequestId) readinessLoading.value = false;
+  }
+}
+
+async function prepareWorkspace() {
+  const hostId = targetHostId.value;
+  const cwd = targetCwd.value.trim();
+  if (!canPrepare.value || hostId === null || !cwd.startsWith("/")) return;
+  preparing.value = true;
+  readinessError.value = "";
+  try {
+    await gatewayApi<ThreadMoveReadiness>("/api/threads/move/prepare-workspace", {
+      method: "POST",
+      body: {
+        sourceHostId: props.sourceHostId,
+        sourceThreadId: props.sourceThreadId,
+        targetHostId: hostId,
+        targetCwd: cwd,
+      },
+    });
+    await refreshReadiness();
+  } catch (error: unknown) {
+    readinessError.value = messageFromError(error, t("app.moveThreadPrepareFailed"));
+  } finally {
+    preparing.value = false;
+  }
 }
 </script>
 
@@ -152,7 +266,7 @@ function submit() {
           <Label for="move-thread-host">{{ $t("app.moveThreadTargetHost") }}</Label>
           <Select
             :model-value="targetHostId === null ? undefined : String(targetHostId)"
-            :disabled="submitting || targetHosts.length === 0"
+            :disabled="submitting || preparing || targetHosts.length === 0"
             @update:model-value="targetHostId = Number($event)"
           >
             <SelectTrigger id="move-thread-host" data-testid="move-thread-host" class="w-full">
@@ -173,7 +287,7 @@ function submit() {
           <Label for="move-thread-project">{{ $t("app.moveThreadTargetProject") }}</Label>
           <Select
             :model-value="targetProjectSelectValue"
-            :disabled="submitting || targetHostId === null"
+            :disabled="submitting || preparing || targetHostId === null"
             @update:model-value="selectProject($event)"
           >
             <SelectTrigger
@@ -216,10 +330,41 @@ function submit() {
             id="move-thread-cwd"
             v-model="targetCwd"
             data-testid="move-thread-cwd"
-            :disabled="submitting"
+            :disabled="submitting || preparing"
             :placeholder="$t('app.moveThreadTargetPathPlaceholder')"
           />
           <p class="text-xs leading-5 text-ink-muted">{{ $t("app.moveThreadReconcileNotice") }}</p>
+        </div>
+
+        <div
+          data-testid="move-thread-readiness"
+          class="rounded-md border border-hairline bg-surface/60 p-3 text-sm"
+        >
+          <p v-if="readinessLoading" class="text-ink-muted">
+            {{ $t("app.moveThreadReadinessChecking") }}
+          </p>
+          <p v-else-if="readinessError" class="whitespace-pre-line text-destructive">
+            {{ readinessError }}
+          </p>
+          <p
+            v-else-if="readiness !== null"
+            :class="readiness.status === 'ready' ? 'text-success' : 'text-destructive'"
+          >
+            {{ readinessMessage }}
+          </p>
+          <p v-else class="text-ink-muted">
+            {{ $t("app.moveThreadReadinessRequired") }}
+          </p>
+          <Button
+            v-if="canPrepare"
+            type="button"
+            class="mt-3"
+            data-testid="move-thread-prepare"
+            :disabled="preparing"
+            @click="prepareWorkspace"
+          >
+            {{ $t("app.moveThreadPrepareWorkspace") }}
+          </Button>
         </div>
 
         <div
@@ -233,7 +378,7 @@ function submit() {
           <Button
             type="button"
             variant="outline"
-            :disabled="submitting"
+            :disabled="submitting || preparing"
             @click="emit('update:open', false)"
           >
             {{ $t("app.cancel") }}

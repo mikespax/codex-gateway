@@ -74,6 +74,28 @@ export interface ThreadMoveResult {
   };
 }
 
+export type ThreadMoveReadinessStatus =
+  | "ready"
+  | "source_workspace_missing"
+  | "target_workspace_missing"
+  | "source_not_git"
+  | "target_not_git"
+  | "repository_mismatch"
+  | "source_commit_missing_on_target";
+
+export interface ThreadMoveReadiness {
+  status: ThreadMoveReadinessStatus;
+  source: {
+    hostId: number;
+    threadId: string;
+    cwd: string;
+  };
+  target: {
+    hostId: number;
+    cwd: string;
+  };
+}
+
 export interface ThreadTurnsPageResult {
   history: ThreadTimelineHistoryState;
   turnsPage: {

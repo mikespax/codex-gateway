@@ -61,6 +61,24 @@ export const threadMoveSchema = z
     path: ["targetHostId"],
   });
 
+export const threadMoveReadinessSchema = z
+  .object({
+    sourceHostId: z.coerce.number().int().positive(),
+    sourceThreadId: z.string().trim().min(1),
+    targetHostId: z.coerce.number().int().positive(),
+    targetCwd: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => value.startsWith("/"), "Target working directory must be absolute"),
+  })
+  .refine((input) => input.sourceHostId !== input.targetHostId, {
+    message: "Choose a different target host",
+    path: ["targetHostId"],
+  });
+
+export const threadMovePrepareWorkspaceSchema = threadMoveReadinessSchema;
+
 export const threadSettingFields = {
   model: z.string().trim().nullable().optional(),
   effort: z.string().trim().min(1).nullable().optional(),

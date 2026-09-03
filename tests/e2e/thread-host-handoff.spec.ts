@@ -24,6 +24,242 @@ const threadListSchema = z
   })
   .loose();
 
+const threadMoveReadinessSchema = z
+  .object({
+    status: z.enum([
+      "ready",
+      "source_workspace_missing",
+      "target_workspace_missing",
+      "source_not_git",
+      "target_not_git",
+      "repository_mismatch",
+      "source_commit_missing_on_target",
+    ]),
+    source: z.object({ hostId: z.number(), threadId: z.string(), cwd: z.string() }),
+    target: z.object({ hostId: z.number(), cwd: z.string() }),
+  })
+  .strict();
+
+test("prepares a missing target workspace from a clean source origin", async ({
+  page,
+  remoteWorkspace,
+}) => {
+  await openApp(page);
+
+  const suffix = randomUUID();
+  const rootPath = `/tmp/codex-gateway-prepare-${suffix}`;
+  const originPath = `${rootPath}/origin.git`;
+  const sourcePath = `${rootPath}/source`;
+  const targetPath = `${rootPath}/target`;
+  await execRemoteSsh(
+    remoteWorkspace.remote,
+    `
+set -eu
+mkdir -p -- ${shellQuote(rootPath)}
+git init --bare -q ${shellQuote(originPath)}
+git clone -q ${shellQuote(originPath)} ${shellQuote(sourcePath)}
+git -C ${shellQuote(sourcePath)} config user.email codex-gateway-e2e@example.invalid
+git -C ${shellQuote(sourcePath)} config user.name 'Codex Gateway E2E'
+printf 'prepared workspace\\n' >${shellQuote(`${sourcePath}/README.md`)}
+git -C ${shellQuote(sourcePath)} add README.md
+git -C ${shellQuote(sourcePath)} commit -qm 'test: establish preparation baseline'
+git -C ${shellQuote(sourcePath)} push -q origin HEAD
+`,
+  );
+
+  try {
+    const source = await remoteWorkspace.provision({
+      hostName: `prepare-source-${suffix}`,
+      remotePath: sourcePath,
+    });
+    const targetHost = await remoteWorkspace.addHost(`prepare-target-${suffix}`);
+    const sourceThreadId = await startRemoteThreadFromProjectMenu(
+      page,
+      remoteWorkspace.remote,
+      source.project.id,
+    );
+
+    const result = await authenticatedFetch(
+      page,
+      {
+        url: "/api/threads/move/prepare-workspace",
+        method: "POST",
+        body: {
+          sourceHostId: source.host.id,
+          sourceThreadId,
+          targetHostId: targetHost.id,
+          targetCwd: targetPath,
+        },
+      },
+      (value) => threadMoveReadinessSchema.parse(value),
+    );
+    expect(result.status).toBe("ready");
+    expect(result.source.cwd).toBe(sourcePath);
+    expect(result.target).toEqual({ hostId: targetHost.id, cwd: targetPath });
+
+    const readiness = await authenticatedFetch(
+      page,
+      {
+        url:
+          `/api/threads/move/readiness?sourceHostId=${source.host.id}` +
+          `&sourceThreadId=${encodeURIComponent(sourceThreadId)}` +
+          `&targetHostId=${targetHost.id}` +
+          `&targetCwd=${encodeURIComponent(targetPath)}`,
+      },
+      (value) => threadMoveReadinessSchema.parse(value),
+    );
+    expect(readiness.status).toBe("ready");
+
+    await expect(
+      authenticatedFetch(
+        page,
+        {
+          url: "/api/threads/move/prepare-workspace",
+          method: "POST",
+          body: {
+            sourceHostId: source.host.id,
+            sourceThreadId,
+            targetHostId: targetHost.id,
+            targetCwd: targetPath,
+          },
+        },
+        () => undefined,
+      ),
+    ).rejects.toThrow("already exists");
+  } finally {
+    await execRemoteSsh(remoteWorkspace.remote, `rm -rf -- ${shellQuote(rootPath)}`);
+  }
+});
+
+test("reports a ready compatible Git workspace without exposing remote URLs", async ({
+  page,
+  remoteWorkspace,
+}) => {
+  await openApp(page);
+
+  const suffix = randomUUID();
+  const rootPath = `/tmp/codex-gateway-readiness-${suffix}`;
+  const originPath = `${rootPath}/origin.git`;
+  const sourcePath = `${rootPath}/source`;
+  const targetPath = `${rootPath}/target`;
+  await execRemoteSsh(
+    remoteWorkspace.remote,
+    `
+set -eu
+mkdir -p -- ${shellQuote(rootPath)}
+git init --bare -q ${shellQuote(originPath)}
+git clone -q ${shellQuote(originPath)} ${shellQuote(sourcePath)}
+git -C ${shellQuote(sourcePath)} config user.email codex-gateway-e2e@example.invalid
+git -C ${shellQuote(sourcePath)} config user.name 'Codex Gateway E2E'
+printf 'readiness\\n' >${shellQuote(`${sourcePath}/README.md`)}
+git -C ${shellQuote(sourcePath)} add README.md
+git -C ${shellQuote(sourcePath)} commit -qm 'test: establish readiness baseline'
+git -C ${shellQuote(sourcePath)} push -q origin HEAD
+git clone -q ${shellQuote(originPath)} ${shellQuote(targetPath)}
+`,
+  );
+
+  try {
+    const source = await remoteWorkspace.provision({
+      hostName: `readiness-source-${suffix}`,
+      remotePath: sourcePath,
+    });
+    const target = await remoteWorkspace.provision({
+      hostName: `readiness-target-${suffix}`,
+      remotePath: targetPath,
+    });
+    const sourceThreadId = await startRemoteThreadFromProjectMenu(
+      page,
+      remoteWorkspace.remote,
+      source.project.id,
+    );
+
+    const result = await authenticatedFetch(
+      page,
+      {
+        url:
+          `/api/threads/move/readiness?sourceHostId=${source.host.id}` +
+          `&sourceThreadId=${encodeURIComponent(sourceThreadId)}` +
+          `&targetHostId=${target.host.id}` +
+          `&targetCwd=${encodeURIComponent(targetPath)}`,
+      },
+      (value) => threadMoveReadinessSchema.parse(value),
+    );
+
+    expect(result.status).toBe("ready");
+    expect(result.source).toEqual({
+      hostId: source.host.id,
+      threadId: sourceThreadId,
+      cwd: sourcePath,
+    });
+    expect(result.target).toEqual({ hostId: target.host.id, cwd: targetPath });
+    expect(JSON.stringify(result)).not.toContain("origin.git");
+  } finally {
+    await execRemoteSsh(remoteWorkspace.remote, `rm -rf -- ${shellQuote(rootPath)}`);
+  }
+});
+
+test("classifies non-Git and missing target workspaces before continuation", async ({
+  page,
+  remoteWorkspace,
+}) => {
+  await openApp(page);
+
+  const suffix = randomUUID();
+  const sourcePath = `/tmp/codex-gateway-readiness-source-${suffix}`;
+  const targetPath = `/tmp/codex-gateway-readiness-target-${suffix}`;
+  await execRemoteSsh(
+    remoteWorkspace.remote,
+    `mkdir -p -- ${shellQuote(sourcePath)} ${shellQuote(targetPath)}`,
+  );
+  try {
+    const source = await remoteWorkspace.provision({
+      hostName: `readiness-source-missing-${suffix}`,
+      remotePath: sourcePath,
+    });
+    const target = await remoteWorkspace.provision({
+      hostName: `readiness-target-missing-${suffix}`,
+      remotePath: targetPath,
+    });
+    const sourceThreadId = await startRemoteThreadFromProjectMenu(
+      page,
+      remoteWorkspace.remote,
+      source.project.id,
+    );
+
+    const sourceNotGit = await authenticatedFetch(
+      page,
+      {
+        url:
+          `/api/threads/move/readiness?sourceHostId=${source.host.id}` +
+          `&sourceThreadId=${encodeURIComponent(sourceThreadId)}` +
+          `&targetHostId=${target.host.id}` +
+          `&targetCwd=${encodeURIComponent(targetPath)}`,
+      },
+      (value) => threadMoveReadinessSchema.parse(value),
+    );
+    expect(sourceNotGit.status).toBe("source_not_git");
+
+    const missingTarget = await authenticatedFetch(
+      page,
+      {
+        url:
+          `/api/threads/move/readiness?sourceHostId=${source.host.id}` +
+          `&sourceThreadId=${encodeURIComponent(sourceThreadId)}` +
+          `&targetHostId=${target.host.id}` +
+          `&targetCwd=${encodeURIComponent(`${targetPath}/gone`)}`,
+      },
+      (value) => threadMoveReadinessSchema.parse(value),
+    );
+    expect(missingTarget.status).toBe("target_workspace_missing");
+  } finally {
+    await execRemoteSsh(
+      remoteWorkspace.remote,
+      `rm -rf -- ${shellQuote(sourcePath)} ${shellQuote(targetPath)}`,
+    );
+  }
+});
+
 test("hands a thread off between isolated logical hosts without removing the source", async ({
   page,
   remoteWorkspace,
