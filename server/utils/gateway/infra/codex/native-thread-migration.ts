@@ -90,7 +90,7 @@ interface RolloutInspection {
   cwd: string | null;
   lineCount: number;
   attachmentPaths: string[];
-  hasExternalAttachmentReference: boolean;
+  externalAttachmentReferenceCount: number;
   hasUnsupportedPersistedState: boolean;
 }
 
@@ -366,6 +366,8 @@ export class NativeThreadMigrationService {
       let totalBytes = 0;
       let attachmentBytes = 0;
       let attachmentFiles = 0;
+      let goalAccountingPreserved = true;
+      const warnings = new Set<string>();
       const transferredAttachments = new Set<string>();
       const targetThreads: MigrationThread[] = [];
       for (const sourceThread of sourceThreads) {
@@ -399,12 +401,6 @@ export class NativeThreadMigrationService {
           );
         }
         const inspection = await inspectRollout(localRolloutPath, sourceThread.id);
-        if (inspection.hasExternalAttachmentReference) {
-          throw new NativeThreadMigrationError(
-            "nativeMigrationAttachmentsUnsupported",
-            "Native migration cannot prove that an external attachment reference is transferable",
-          );
-        }
         if (inspection.hasUnsupportedPersistedState) {
           throw new NativeThreadMigrationError(
             "nativeMigrationPersistedStateUnsupported",
@@ -437,9 +433,23 @@ export class NativeThreadMigrationService {
           );
         }
         sourceThread.turnCount = sourceTurns.length;
+        const attachmentResolution = await resolveAttachmentTransferPaths(
+          this.dependencies.remoteFiles,
+          sourceHost,
+          inspection.attachmentPaths,
+          sourceHome.codexHome,
+          maxBytes,
+        );
+        if (attachmentResolution.missingExternalPathCount > 0) {
+          warnings.add(
+            "Some external attachment files were already missing and were retained without transfer.",
+          );
+        }
+        if (inspection.externalAttachmentReferenceCount > 0) {
+          warnings.add("External attachment references were retained without transfer.");
+        }
         const pendingAttachmentSizes = new Map<string, number>();
-        for (const attachmentPath of inspection.attachmentPaths) {
-          const sourceAttachmentPath = validateAttachmentPath(attachmentPath, sourceHome.codexHome);
+        for (const sourceAttachmentPath of attachmentResolution.transferablePaths) {
           if (transferredAttachments.has(sourceAttachmentPath)) continue;
           const attachmentStats = await this.dependencies.remoteFiles.statRemoteFile(
             sourceHost,
@@ -492,8 +502,7 @@ export class NativeThreadMigrationService {
           );
         }
         totalBytes += localStats.size;
-        for (const attachmentPath of inspection.attachmentPaths) {
-          const sourceAttachmentPath = validateAttachmentPath(attachmentPath, sourceHome.codexHome);
+        for (const sourceAttachmentPath of attachmentResolution.transferablePaths) {
           if (transferredAttachments.has(sourceAttachmentPath)) continue;
           const relativeAttachmentPath = posix.relative(
             posix.join(sourceHome.codexHome, "attachments"),
@@ -571,7 +580,8 @@ export class NativeThreadMigrationService {
             "Target app-server did not materialize the transferred thread with the same ID and path",
           );
         }
-        await applyTargetTransferState(targetClient, sourceThread);
+        goalAccountingPreserved =
+          (await applyTargetTransferState(targetClient, sourceThread)) && goalAccountingPreserved;
       }
       const targetThreadsPage = await listDescendantThreads(
         targetClient,
@@ -644,8 +654,10 @@ export class NativeThreadMigrationService {
           historyParity: true,
           descendantsVerified: true,
           goalsVerified: true,
+          goalAccountingPreserved,
           queuesVerified: true,
         },
+        warnings: [...warnings],
         descendants: sourceThreads.slice(1).map((sourceThread) => {
           const targetThread = targetThreads.find((thread) => thread.id === sourceThread.id)!;
           return {
@@ -1023,12 +1035,6 @@ async function readTransferState(client: RpcClient, threadId: string) {
       "Source goal metadata does not match the thread ID",
     );
   }
-  if (goal !== null && (goal.tokensUsed !== 0 || goal.timeUsedSeconds !== 0)) {
-    throw new NativeThreadMigrationError(
-      "nativeMigrationGoalAccountingUnsupported",
-      "Native migration cannot preserve non-zero goal accounting counters",
-    );
-  }
   const normalizedGoal: ThreadGoalSnapshot | null =
     goal === null
       ? null
@@ -1064,7 +1070,7 @@ async function applyTargetTransferState(client: RpcClient, sourceThread: Migrati
       parseThreadGoalSetResponse,
       "nativeMigrationTargetGoalUnsupported",
     );
-    if (!goalMatches(sourceThread.goal, setResult.goal)) {
+    if (!goalMetadataMatches(sourceThread.goal, setResult.goal)) {
       throw new NativeThreadMigrationError(
         "nativeMigrationTargetGoalMismatch",
         "Target app-server did not preserve the transferable goal fields",
@@ -1082,7 +1088,8 @@ async function applyTargetTransferState(client: RpcClient, sourceThread: Migrati
   if (
     (sourceThread.goal === null && targetGoalResult.goal !== null) ||
     (sourceThread.goal !== null &&
-      (targetGoalResult.goal === null || !goalMatches(sourceThread.goal, targetGoalResult.goal)))
+      (targetGoalResult.goal === null ||
+        !goalMetadataMatches(sourceThread.goal, targetGoalResult.goal)))
   ) {
     throw new NativeThreadMigrationError(
       "nativeMigrationTargetGoalMismatch",
@@ -1126,6 +1133,12 @@ async function applyTargetTransferState(client: RpcClient, sourceThread: Migrati
       502,
     );
   }
+  if (sourceThread.goal === null || targetGoalResult.goal === null)
+    return sourceThread.goal === null;
+  return (
+    targetGoalResult.goal.tokensUsed === sourceThread.goal.tokensUsed &&
+    targetGoalResult.goal.timeUsedSeconds === sourceThread.goal.timeUsedSeconds
+  );
 }
 
 async function listAllQueue(client: RpcClient, threadId: string, failureCode: string) {
@@ -1156,7 +1169,7 @@ async function listAllQueue(client: RpcClient, threadId: string, failureCode: st
   return queue;
 }
 
-function goalMatches(
+function goalMetadataMatches(
   source: ThreadGoalSnapshot,
   target: {
     threadId: string;
@@ -1171,9 +1184,7 @@ function goalMatches(
     target.threadId === source.threadId &&
     target.objective === source.objective &&
     target.status === source.status &&
-    target.tokenBudget === source.tokenBudget &&
-    target.tokensUsed === source.tokensUsed &&
-    target.timeUsedSeconds === source.timeUsedSeconds
+    target.tokenBudget === source.tokenBudget
   );
 }
 
@@ -1362,7 +1373,7 @@ async function inspectRollout(path: string, expectedId: string): Promise<Rollout
   const input = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
   let metadata: Record<string, unknown> | null = null;
   const attachmentPaths = new Set<string>();
-  let hasExternalAttachmentReference = false;
+  const externalAttachmentReferences = new Set<string>();
   let hasUnsupportedPersistedState = false;
   let lineCount = 0;
   for await (const line of input) {
@@ -1390,7 +1401,7 @@ async function inspectRollout(path: string, expectedId: string): Promise<Rollout
       if (classification === "path") {
         attachmentPaths.add(reference);
       } else {
-        hasExternalAttachmentReference = true;
+        externalAttachmentReferences.add(reference);
       }
     }
     if (isUnsupportedPersistedState(value)) hasUnsupportedPersistedState = true;
@@ -1421,9 +1432,45 @@ async function inspectRollout(path: string, expectedId: string): Promise<Rollout
     cwd,
     lineCount,
     attachmentPaths: [...attachmentPaths],
-    hasExternalAttachmentReference,
+    externalAttachmentReferenceCount: externalAttachmentReferences.size,
     hasUnsupportedPersistedState,
   };
+}
+
+async function resolveAttachmentTransferPaths(
+  remoteFiles: Pick<RemoteFileService, "statRemoteFile">,
+  sourceHost: HostRecord,
+  attachmentPaths: string[],
+  codexHome: string,
+  maxBytes: number,
+) {
+  const transferablePaths: string[] = [];
+  let missingExternalPathCount = 0;
+  for (const attachmentPath of attachmentPaths) {
+    const normalized = validateNativeMigrationPath(attachmentPath, "Attachment path");
+    if (isInsideCodexAttachmentRoot(normalized, codexHome)) {
+      transferablePaths.push(validateAttachmentPath(normalized, codexHome));
+      continue;
+    }
+    try {
+      await remoteFiles.statRemoteFile(sourceHost, normalized, { maxSize: maxBytes });
+    } catch (error) {
+      if (isMissingSftpPath(error)) {
+        missingExternalPathCount += 1;
+        continue;
+      }
+      throw new NativeThreadMigrationError(
+        "nativeMigrationAttachmentsUnsupported",
+        "Native migration could not verify an external attachment reference",
+        502,
+      );
+    }
+    throw new NativeThreadMigrationError(
+      "nativeMigrationAttachmentsUnsupported",
+      "Native migration found an external attachment file that cannot be transferred safely",
+    );
+  }
+  return { transferablePaths, missingExternalPathCount };
 }
 
 export function classifyNativeMigrationAttachmentReference(reference: string) {
@@ -1473,6 +1520,17 @@ function validateAttachmentPath(path: string, codexHome: string) {
     );
   }
   return normalized;
+}
+
+function isInsideCodexAttachmentRoot(path: string, codexHome: string) {
+  const attachmentRoot = posix.join(codexHome, "attachments");
+  const relative = posix.relative(attachmentRoot, path);
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith("../") &&
+    !posix.isAbsolute(relative)
+  );
 }
 
 async function ensureLocalDirectory(directory: string) {

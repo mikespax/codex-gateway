@@ -113,8 +113,11 @@ export interface ThreadNativeMigrationResult {
     historyParity: true;
     descendantsVerified: true;
     goalsVerified: true;
+    goalAccountingPreserved: boolean;
     queuesVerified: true;
   };
+  /** Non-fatal compatibility notes that do not expose paths or session contents. */
+  warnings: string[];
   descendants: Array<{
     threadId: string;
     parentThreadId: string | null;
