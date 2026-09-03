@@ -1396,12 +1396,13 @@ async function inspectRollout(path: string, expectedId: string): Promise<Rollout
       }
     }
     for (const reference of collectAttachmentReferences(value)) {
-      const classification = classifyNativeMigrationAttachmentReference(reference);
+      const normalizedReference = normalizeNativeAttachmentReference(reference);
+      const classification = classifyNativeMigrationAttachmentReference(normalizedReference);
       if (classification === "inline") continue;
       if (classification === "path") {
-        attachmentPaths.add(reference);
+        attachmentPaths.add(normalizedReference);
       } else {
-        externalAttachmentReferences.add(reference);
+        externalAttachmentReferences.add(normalizedReference);
       }
     }
     if (isUnsupportedPersistedState(value)) hasUnsupportedPersistedState = true;
@@ -1435,6 +1436,12 @@ async function inspectRollout(path: string, expectedId: string): Promise<Rollout
     externalAttachmentReferenceCount: externalAttachmentReferences.size,
     hasUnsupportedPersistedState,
   };
+}
+
+function normalizeNativeAttachmentReference(reference: string) {
+  let normalized = reference.trim().replace(/[|,;.)\]}]+$/g, "");
+  normalized = normalized.replace(/:\d+(?::\d+)?$/g, "");
+  return normalized;
 }
 
 async function resolveAttachmentTransferPaths(
