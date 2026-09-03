@@ -37,7 +37,11 @@ export default defineGatewayConfigMutationHandler(async (event): Promise<ThreadM
     targetProjectId: input.targetProjectId ?? null,
   });
 
-  const sourceProject = projectForHost(input.sourceProjectId, sourceHost.id, "Source project");
+  // The source project ID is client-supplied metadata and may be stale after a host/config
+  // refresh. It is only an optimization for opening the source thread; if it no longer exists or
+  // belongs to another host, let the source app-server provide the thread's current cwd instead.
+  // Target project selection remains strict below so a project can never cross host boundaries.
+  const sourceProject = sourceProjectForHost(input.sourceProjectId, sourceHost.id);
   const target = resolveTargetProject(input.targetProjectId, input.targetCwd, targetHost.id);
 
   // Do this before creating a target thread. A handoff must never manufacture a thread in a
@@ -159,6 +163,13 @@ function projectForHost(projectId: number | undefined, hostId: number, label: st
   if (project.hostId !== hostId) {
     throw createError({ statusCode: 400, statusMessage: `${label} belongs to another host` });
   }
+  return project;
+}
+
+function sourceProjectForHost(projectId: number | undefined, hostId: number) {
+  if (projectId === undefined) return null;
+  const project = projectStore.get(projectId);
+  if (project === null || project.hostId !== hostId) return null;
   return project;
 }
 

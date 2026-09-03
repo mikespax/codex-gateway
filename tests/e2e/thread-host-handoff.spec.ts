@@ -64,7 +64,9 @@ test("hands a thread off between isolated logical hosts without removing the sou
         method: "POST",
         body: {
           sourceHostId: source.host.id,
-          sourceProjectId: source.project.id,
+          // The sidebar can retain a project ID from another host while its thread metadata is
+          // refreshing. The server must safely derive the source cwd from the opened thread.
+          sourceProjectId: target.project.id,
           sourceThreadId,
           targetHostId: target.host.id,
           targetProjectId: target.project.id,
@@ -115,6 +117,36 @@ test("hands a thread off between isolated logical hosts without removing the sou
       `rm -rf -- ${shellQuote(sourcePath)} ${shellQuote(targetPath)}`,
     );
   }
+});
+
+test("rejects a target project that belongs to another host", async ({ page, remoteWorkspace }) => {
+  await openApp(page);
+
+  const suffix = randomUUID();
+  const source = await remoteWorkspace.provision({
+    hostName: `handoff-source-target-validation-${suffix}`,
+  });
+  const target = await remoteWorkspace.provision({
+    hostName: `handoff-target-target-validation-${suffix}`,
+  });
+
+  await expect(
+    authenticatedFetch(
+      page,
+      {
+        url: "/api/threads/move",
+        method: "POST",
+        body: {
+          sourceHostId: source.host.id,
+          sourceProjectId: target.project.id,
+          sourceThreadId: "unused-for-target-validation",
+          targetHostId: target.host.id,
+          targetProjectId: source.project.id,
+        },
+      },
+      () => undefined,
+    ),
+  ).rejects.toThrow("Target project belongs to another host");
 });
 
 function shellQuote(value: string) {
