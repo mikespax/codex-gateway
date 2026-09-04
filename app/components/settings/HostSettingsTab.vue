@@ -20,7 +20,7 @@ function useQnapPreset() {
     username: "admin",
     port: "22",
     authMode: "privateKey",
-    privateKeyPath: "/root/.ssh/codex_qnap_ed25519",
+    privateKeyPath: "/run/secrets/codex_qnap_ed25519",
     proxyUrl: "",
   };
 }

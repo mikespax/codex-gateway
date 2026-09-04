@@ -133,7 +133,7 @@
     "hostMonitorWindow": "Adaptive sampling · latest 300 points",
     "hostMonitorHostCount": "{count} configured hosts",
     "qnapHostPreset": "Use QNAP NAS preset",
-    "qnapHostPresetDescription": "Pre-fills the managed QNAP address and Lenovo SSH key path.",
+    "qnapHostPresetDescription": "Pre-fills the managed QNAP address and the Gateway's read-only SSH key path.",
     "hostMetricsWaiting": "Waiting for the Host SSH connection and metrics",
     "hostMetricCpu": "CPU",
     "hostMetricMemory": "Memory",
