@@ -6,9 +6,10 @@ import { hostById } from "@/stores/gateway-catalog/selectors";
 import { useGatewayHostMetricsDataStore } from "@/stores/gateway-host-metrics/data";
 import { useHostMetricsSubscription } from "@/composables/host-metrics/useHostMetricsSubscription";
 import { useHostMetricCharts } from "@/composables/host-metrics/useHostMetricCharts";
-import { formatBytes, formatPercent } from "@/utils/host-metrics";
+import { formatByteRate, formatBytes, formatPercent } from "@/utils/host-metrics";
 import HostMetricCard from "./HostMetricCard.vue";
 import HostMetricLineChart from "./HostMetricLineChart.client.vue";
+import HostFilesystemList from "./HostFilesystemList.vue";
 import HostGpuProcessList from "./HostGpuProcessList.vue";
 
 const props = defineProps<{ hostId: number }>();
@@ -80,6 +81,23 @@ useHostMetricsSubscription(root, hostId);
           value-suffix="%"
           :maximum="100"
         />
+      </HostMetricCard>
+      <HostMetricCard
+        :test-id="`host-metric-network-${hostId}`"
+        :title="$t('app.hostMetricNetwork')"
+        :value="`${formatByteRate(latest.network.receiveBytesPerSecond)} ↓`"
+        :subtitle="`${latest.network.interfaces.join(', ') || '-'} · ${formatByteRate(latest.network.transmitBytesPerSecond)} ↑`"
+      >
+        <HostMetricLineChart :series="charts.networkSeries.value" value-suffix=" MiB/s" />
+      </HostMetricCard>
+      <HostMetricCard
+        :test-id="`host-metric-disk-${hostId}`"
+        :title="$t('app.hostMetricDisk')"
+        :value="`${formatByteRate(latest.disk.readBytesPerSecond)} R`"
+        :subtitle="`${formatByteRate(latest.disk.writeBytesPerSecond)} W`"
+      >
+        <HostMetricLineChart :series="charts.diskSeries.value" value-suffix=" MiB/s" />
+        <HostFilesystemList :filesystems="latest.disk.filesystems" />
       </HostMetricCard>
     </div>
 

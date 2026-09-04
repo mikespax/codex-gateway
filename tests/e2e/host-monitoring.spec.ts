@@ -23,8 +23,8 @@ test("streams real Linux Host metrics through the shared realtime connection", a
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId(`host-metric-cpu-${project.hostId}`)).toBeVisible({ timeout: 30_000 });
   await expect(panel.getByTestId(`host-metric-memory-${project.hostId}`)).toBeVisible();
-  await expect(panel.getByTestId("host-metric-network")).toHaveCount(0);
-  await expect(panel.getByTestId("host-metric-disk")).toHaveCount(0);
+  await expect(panel.getByTestId(`host-metric-network-${project.hostId}`)).toBeVisible();
+  await expect(panel.getByTestId(`host-metric-disk-${project.hostId}`)).toBeVisible();
   await expect(panel.getByText("实时采集中")).toBeVisible();
   await expect(panel.getByRole("heading", { name: "GPU", exact: true })).toBeVisible();
   await expect(panel.getByTestId(`host-metric-gpu-${project.hostId}-0`)).toContainText("E2E Training GPU");
