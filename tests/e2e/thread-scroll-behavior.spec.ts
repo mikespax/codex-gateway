@@ -39,7 +39,6 @@ import {
   installDeferredThreadTurnsLoadStub,
   requestOlderTurnsFromStore,
   releaseDeferredThreadTurnsLoad,
-  startBottomDistanceTracking,
   startElementTopTracking,
   startLocatorTopTracking,
   stopFrameTracking,
@@ -1065,10 +1064,12 @@ test("completed turns do not collapse intermediate steps while the user is detac
     .toBeLessThanOrEqual(visibleAnchor.top + 2);
 
   await scrollChatViewportToBottom(page);
-  await expect(page.getByTestId("intermediate-steps")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: /Intermediate steps|中间过程/ }).first(),
+  ).toHaveAttribute("data-state", "open");
 });
 
-test("automatic intermediate collapse stays pinned without a transient jump", async ({ page }) => {
+test("completed intermediate steps stay expanded until explicitly collapsed", async ({ page }) => {
   await openApp(page);
   const threadId = "e2e-pinned-collapse-thread";
   const agentLines = Array.from(
@@ -1108,19 +1109,22 @@ test("automatic intermediate collapse stays pinned without a transient jump", as
 
   await expect(page.getByText("pinned collapse line 120")).toBeVisible();
   await scrollChatViewportToBottom(page);
-  await startBottomDistanceTracking(page);
   await completeTurnWithFinalAgentMessage(page, {
     agentItemId: "agent-pinned-collapse",
     finalItemId: "agent-pinned-collapse-final",
     finalText: "final answer after pinned collapse",
   });
 
-  await expect(page.getByTestId("intermediate-steps")).toBeHidden();
-  await waitForAnimationFrames(page, 4);
-  expect(Math.max(...(await stopFrameTracking(page)))).toBeLessThanOrEqual(2);
+  const toggle = page.getByRole("button", { name: /Intermediate steps|中间过程/ }).first();
+  await expect(toggle).toHaveAttribute("data-state", "open");
+  await expect(page.getByTestId("intermediate-steps")).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("data-state", "closed");
+  await expect(page.getByTestId("intermediate-steps")).toHaveCount(0);
 });
 
-test("manually expanded completed intermediate steps stay open after returning to bottom", async ({
+test("completed intermediate steps can be collapsed and reopened after returning to bottom", async ({
   page,
 }) => {
   await openApp(page);
@@ -1168,7 +1172,11 @@ test("manually expanded completed intermediate steps stay open after returning t
   });
 
   const toggle = page.getByRole("button", { name: /中间过程/ }).first();
+  await expect(toggle).toHaveAttribute("data-state", "open");
+  await toggle.click();
   await expect(toggle).toHaveAttribute("data-state", "closed");
+  await expect(page.getByTestId("intermediate-steps")).toHaveCount(0);
+
   await toggle.click();
   await expect(toggle).toHaveAttribute("data-state", "open");
   await expect(page.getByTestId("intermediate-steps")).toBeVisible();

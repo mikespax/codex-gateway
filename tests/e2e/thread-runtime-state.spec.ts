@@ -25,7 +25,7 @@ const storedRouteSelectionSchema = z.object({
   threadId: z.string().nullable(),
 });
 
-test("a turn row arriving before runtime activation opens when running and closes on completion", async ({
+test("intermediate steps start expanded before runtime activation and stay open after completion", async ({
   page,
 }) => {
   await openApp(page);
@@ -60,7 +60,8 @@ test("a turn row arriving before runtime activation opens when running and close
   const intermediateToggle = page.getByRole("button", {
     name: /Intermediate steps|中间过程/,
   });
-  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
+  await expect(page.getByText("Live work should already be visible")).toBeVisible();
   await expect(page.getByTestId("intermediate-steps-working")).toHaveCount(0);
   await expect(page.getByTestId("intermediate-header-duration")).toHaveCount(0);
   await expect(page.getByTestId("message-timestamp")).toHaveAttribute(
@@ -107,7 +108,8 @@ test("a turn row arriving before runtime activation opens when running and close
   });
 
   await expect(page.getByText("The live work is complete")).toBeVisible();
-  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
+  await expect(page.getByText("Live work should already be visible")).toBeVisible();
   await expect(page.getByTestId("intermediate-steps-working")).toHaveCount(0);
   await expect(page.getByTestId("intermediate-header-duration")).toHaveCount(0);
   await expect(page.getByTestId("message-timestamp")).toHaveCount(2);
@@ -117,9 +119,10 @@ test("a turn row arriving before runtime activation opens when running and close
   );
 
   await intermediateToggle.click();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
   await expect(
     page.getByRole("paragraph").filter({ hasText: "Live work should already be visible" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.getByTestId("reasoning-duration")).toHaveCount(0);
 });
 
@@ -231,10 +234,12 @@ test("opening completed history does not show fake thinking", async ({ page }) =
 
   await applyGatewayLiveEvent(page, completedEvent);
 
-  await expect(page.getByRole("button", { name: /Intermediate steps|中间过程/ })).toHaveAttribute(
-    "data-state",
-    "closed",
-  );
+  const completedIntermediateToggle = page.getByRole("button", {
+    name: /Intermediate steps|中间过程/,
+  });
+  await expect(completedIntermediateToggle).toHaveAttribute("data-state", "open");
+  await completedIntermediateToggle.click();
+  await expect(completedIntermediateToggle).toHaveAttribute("data-state", "closed");
   await expect(page.getByTestId("stop-turn-button")).toHaveCount(0);
   const agentActions = page.getByTestId("agent-message-actions");
   await expect(agentActions).toBeVisible();

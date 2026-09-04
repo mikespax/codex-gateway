@@ -82,7 +82,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
     timeout: 120_000,
   });
   await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible();
-  await expect(firstIntermediateStepsToggle(page)).toHaveAttribute("data-state", "closed");
+  await expect(firstIntermediateStepsToggle(page)).toHaveAttribute("data-state", "open");
   const reconnectedMarker = `E2E WS重连 ${Date.now()}`;
   await sendTextTurn(page, reconnectedMarker);
   await expect.poll(() => chatViewportBottomDistance(page)).toBeLessThanOrEqual(2);
@@ -110,8 +110,9 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       .getByText(steerMarker),
   );
   await reloadApp(page);
-  await expect(firstIntermediateStepsToggle(page)).toHaveAttribute("data-state", "closed");
+  await expect(firstIntermediateStepsToggle(page)).toHaveAttribute("data-state", "open");
   await firstIntermediateStepsToggle(page).click();
+  await expect(firstIntermediateStepsToggle(page)).toHaveAttribute("data-state", "closed");
   await revealVirtualizedChatLocator(
     page,
     page

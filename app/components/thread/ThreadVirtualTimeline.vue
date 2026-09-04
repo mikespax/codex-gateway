@@ -40,7 +40,6 @@ const timelineViewport = ref<InstanceType<typeof VirtualTimelineViewport> | null
 const projectId = computed(() => props.projectId ?? null);
 const planModeActive = computed(() => selectedThreadMode() === "plan");
 const threadIsRunning = computed(() => props.threadStatus === "running");
-const autoCollapseIntermediate = computed(() => !userDetachedFromLatest.value);
 
 provideFilePreviewContext({
   hostId: toRef(props, "hostId"),
@@ -82,7 +81,6 @@ const disclosureTurns = computed(() =>
 const { isIntermediateOpen, setIntermediateOpen } = useIntermediateStepsDisclosure({
   turns: disclosureTurns,
   threadIsRunning,
-  autoCollapseIntermediate,
 });
 const activeIntermediateIsOpen = computed(() =>
   disclosureTurns.value.some((turn) => turn.turnIsActive && isIntermediateOpen(turn.id)),
@@ -93,11 +91,11 @@ const rows = computed<ThreadTimelineRow[]>((previous) => {
     sections,
     intermediateOpen: isIntermediateOpen(turn.id),
   }));
-  // The disclosure controller already owns the Agent-loop lifecycle: active work stays open and
-  // the whole intermediate process collapses only after the thread settles. Footer actions must
-  // consume that result instead of treating one turn/completed event as the end of a Goal or an
-  // automatic continuation. Requiring every disclosure to be closed also keeps the actions hidden
-  // while a reader has explicitly reopened historical intermediate work.
+  // The disclosure controller owns explicit intermediate-step visibility: groups start expanded
+  // and collapse only after the reader clicks their arrow. Footer actions consume that result
+  // instead of treating one turn/completed event as the end of a Goal or an automatic continuation.
+  // Requiring every disclosure to be closed keeps the actions hidden while intermediate work is
+  // still visible.
   const agentActionsAvailable =
     !threadIsRunning.value && timelineTurns.every((turn) => !turn.intermediateOpen);
   const next = buildThreadTimelineRows({

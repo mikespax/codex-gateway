@@ -12,7 +12,6 @@ interface IntermediateDisclosureTurn {
 export function useIntermediateStepsDisclosure(input: {
   turns: ComputedRef<IntermediateDisclosureTurn[]>;
   threadIsRunning: ComputedRef<boolean>;
-  autoCollapseIntermediate: ComputedRef<boolean>;
 }) {
   // Disclosure state belongs to the timeline, not to virtual row components. Rows are destroyed
   // offscreen, so keeping this small per-turn map here preserves explicit user choices without
@@ -23,7 +22,6 @@ export function useIntermediateStepsDisclosure(input: {
   watch(
     () => [
       input.threadIsRunning.value,
-      input.autoCollapseIntermediate.value,
       ...input.turns.value.flatMap((turn) => [
         turn.id,
         statusValue(turn.status),
@@ -40,21 +38,16 @@ export function useIntermediateStepsDisclosure(input: {
       }
 
       for (const turn of input.turns.value) {
-        // A new active turn opens its intermediate work so the live trace and bottom-follow mode
-        // are visible without another click. Preserve an explicit open/closed choice while that
-        // turn continues streaming, including a reader deliberately collapsing noisy work.
+        // Intermediate work is visible by default, both while a turn is running and after it
+        // completes. Preserve an explicit open/closed choice while the turn continues streaming,
+        // including a reader deliberately collapsing noisy work.
         if (input.threadIsRunning.value && turn.turnIsActive) {
           // The turn row can arrive one realtime flush before the runtime projection changes to
-          // running. That first pass initializes the disclosure closed below; it is not a user
-          // choice. Open again on the active transition unless the reader actually toggled it.
+          // running. Open again on the active transition unless the reader actually toggled it.
           if (!touchedByUser.has(turn.id)) openByTurnId.set(turn.id, true);
           continue;
         }
-        if (input.autoCollapseIntermediate.value && !touchedByUser.has(turn.id)) {
-          openByTurnId.set(turn.id, false);
-        } else if (!openByTurnId.has(turn.id)) {
-          openByTurnId.set(turn.id, false);
-        }
+        if (!openByTurnId.has(turn.id)) openByTurnId.set(turn.id, true);
       }
     },
     { immediate: true },
