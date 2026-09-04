@@ -5,7 +5,10 @@ import { remoteLoginShellCommand } from "../ssh/remote-command";
 import { shellQuote } from "../ssh/shell";
 import type { SshConnectionPool } from "../ssh/ssh-connection";
 
-export const THREAD_STORAGE_CACHE_TTL_MS = 60_000;
+// Thread size is advisory UI metadata, not live state. Keep the value stable across sidebar
+// refreshes and conversation opens; a six-hour refresh is enough to surface meaningful growth
+// without repeatedly walking large rollout files or attachment references over SSH.
+export const THREAD_STORAGE_CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
 export const THREAD_STORAGE_SCAN_TIMEOUT_MS = 15_000;
 export const THREAD_STORAGE_MAX_OUTPUT_BYTES = 128 * 1024;
 export const THREAD_STORAGE_MAX_CONCURRENT_SCANS = 1;
