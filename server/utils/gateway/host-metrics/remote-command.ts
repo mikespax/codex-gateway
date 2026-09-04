@@ -52,9 +52,12 @@ if [ "$(uname -s 2>/dev/null || printf unknown)" = "Darwin" ]; then
   printf '@@FS\n'
   # macOS df does not expose a filesystem-type column, while the shared parser
   # intentionally accepts a normalized device/type/size shape. Keep the root
-  # filesystem here so sidebar HDD utilization works for Mac hosts as well.
+  # data filesystem here so sidebar HDD utilization reflects the APFS container,
+  # not the nearly-empty sealed system volume.
   printf 'Filesystem Type 1024-blocks Used Available Capacity Mounted on\n'
-  df -Pk / 2>/dev/null | awk 'NR == 2 { print $1, "apfs", $2, $3, $4, $5, $6 }'
+  mac_data_mount="/System/Volumes/Data"
+  [ -d "$mac_data_mount" ] || mac_data_mount="/"
+  df -Pk "$mac_data_mount" 2>/dev/null | awk 'NR == 2 { print $1, "apfs", $2, $3, $4, $5, $6 }'
   printf '@@GPU\n'
 ${includeGpuProcesses ? gpuProcessScript() : ""}
   printf '@@END\n'
