@@ -22,7 +22,7 @@ void test("filesystem parsing falls back to calculated usage when capacity is in
 
 function firstFilesystemUsagePercent(value: unknown): number {
   assert.ok(Array.isArray(value));
-  const filesystem = value.at(0);
+  const filesystem: unknown = value.at(0);
   assert.ok(
     typeof filesystem === "object" &&
       filesystem !== null &&
