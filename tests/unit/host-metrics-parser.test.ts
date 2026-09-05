@@ -8,7 +8,9 @@ void test("filesystem parsing honors df capacity percentages", () => {
     "/dev/disk1s1s1 apfs 3906682672 16299840 1253872240 2% /",
   ]);
   assert.equal(filesystems.length, 1);
-  assert.equal(filesystems[0]?.usagePercent, 2);
+  const [filesystem] = filesystems;
+  assert.ok(filesystem !== undefined);
+  assert.equal(filesystem.usagePercent, 2);
 });
 
 void test("filesystem parsing falls back to calculated usage when capacity is invalid", () => {
@@ -17,5 +19,7 @@ void test("filesystem parsing falls back to calculated usage when capacity is in
     "/dev/sda ext4 1000 125 875 - /",
   ]);
   assert.equal(filesystems.length, 1);
-  assert.equal(filesystems[0]?.usagePercent, 12.5);
+  const [filesystem] = filesystems;
+  assert.ok(filesystem !== undefined);
+  assert.equal(filesystem.usagePercent, 12.5);
 });
