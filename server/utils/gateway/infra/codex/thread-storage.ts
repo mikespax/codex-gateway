@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import pLimit from "p-limit";
 import type { GatewayThread, HostRecord } from "~~/shared/types";
+import type { CommandResult } from "../ssh/ssh-types";
 import { remoteLoginShellCommand } from "../ssh/remote-command";
 import { shellQuote } from "../ssh/shell";
 import type { SshConnectionPool } from "../ssh/ssh-connection";
@@ -101,7 +102,7 @@ export class ThreadStorageScanner {
       return selectValues(requested, values);
     }
 
-    let scanned: { code: number; stdout: string };
+    let scanned: CommandResult;
     try {
       scanned = await this.ssh.exec(
         host,
