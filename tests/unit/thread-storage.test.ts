@@ -5,6 +5,7 @@ import {
   isThreadStoragePathInCodexSessions,
   parseThreadStorageScanOutput,
   ThreadStorageScanner,
+  THREAD_STORAGE_CACHE_TTL_MS,
   THREAD_STORAGE_SCAN_TIMEOUT_MS,
 } from "../../server/utils/gateway/infra/codex/thread-storage";
 import {
@@ -72,7 +73,7 @@ void test("thread storage scan command scopes rollout and attachments to Codex r
   assert.doesNotMatch(command, /du -sk.*cwd/);
 });
 
-void test("thread storage scanner performs one bulk scan and caches results for one minute", async () => {
+void test("thread storage scanner performs one bulk scan and caches results for six hours", async () => {
   let now = 10_000;
   let calls = 0;
   let timeout: number | undefined;
@@ -107,7 +108,7 @@ void test("thread storage scanner performs one bulk scan and caches results for 
   );
   assert.equal(calls, 1);
   assert.equal(timeout, THREAD_STORAGE_SCAN_TIMEOUT_MS);
-  now += 60_001;
+  now += THREAD_STORAGE_CACHE_TTL_MS + 1;
   await scanner.scan(scanHost, threads);
   assert.equal(calls, 2);
 });

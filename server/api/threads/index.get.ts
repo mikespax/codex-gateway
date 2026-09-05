@@ -68,16 +68,14 @@ export default defineGatewayEventHandler(async (event) => {
     query.searchTerm ?? null,
   );
   let threadsWithStorage = gatewayThreads;
-  try {
-    const sizes = await threadStorage.scan(host, gatewayThreads);
-    threadsWithStorage = gatewayThreads.map((thread) => ({
-      ...thread,
-      threadBytes: sizes.get(thread.id) ?? null,
-    }));
-  } catch {
-    // Storage is advisory. A missing rollout, unsupported remote utility, or SSH outage must not
-    // hide otherwise authoritative threads from the list.
-  }
+  const cachedSizes = threadStorage.cached(host, gatewayThreads);
+  threadsWithStorage = gatewayThreads.map((thread) => ({
+    ...thread,
+    threadBytes: cachedSizes.get(thread.id) ?? null,
+  }));
+  // Storage is advisory and must never delay an authoritative thread list. Refresh uncached
+  // values in the background; the next sidebar refresh will pick them up.
+  void threadStorage.scan(host, gatewayThreads).catch(() => undefined);
   const projectDirectoryAvailability = await inspectProjectAvailability(host, projects);
   return {
     ...page,
