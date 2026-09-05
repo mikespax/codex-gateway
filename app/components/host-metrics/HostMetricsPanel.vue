@@ -36,11 +36,7 @@ const monitoredHosts = computed(() => {
         class="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-2"
         data-testid="host-metrics-host-list"
       >
-        <HostMetricsHostSection
-          v-for="host in monitoredHosts"
-          :key="host.id"
-          :host-id="host.id"
-        />
+        <HostMetricsHostSection v-for="host in monitoredHosts" :key="host.id" :host-id="host.id" />
       </div>
       <div
         v-else

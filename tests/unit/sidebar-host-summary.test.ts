@@ -18,6 +18,9 @@ void test("sidebar host summary rounds root HDD utilization and handles missing 
     ]),
     66,
   );
-  assert.equal(rootFilesystemUsagePercent([{ mountPoint: "/home", usagePercent: 88, totalBytes: 0 }]), null);
+  assert.equal(
+    rootFilesystemUsagePercent([{ mountPoint: "/home", usagePercent: 88, totalBytes: 0 }]),
+    null,
+  );
   assert.equal(rootFilesystemUsagePercent([]), null);
 });

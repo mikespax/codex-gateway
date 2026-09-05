@@ -76,11 +76,7 @@ useHostMetricsSubscription(root, hostId);
         :value="formatPercent(latest.memory.usagePercent)"
         :subtitle="`${formatBytes(latest.memory.usedBytes)} / ${formatBytes(latest.memory.totalBytes)}`"
       >
-        <HostMetricLineChart
-          :series="charts.memorySeries.value"
-          value-suffix="%"
-          :maximum="100"
-        />
+        <HostMetricLineChart :series="charts.memorySeries.value" value-suffix="%" :maximum="100" />
       </HostMetricCard>
       <HostMetricCard
         :test-id="`host-metric-network-${hostId}`"
